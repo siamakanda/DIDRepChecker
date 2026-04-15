@@ -5,14 +5,18 @@ __pycache__/
 .venv/
 venv/
 ENV/
+build/
+dist/
 
 # Data Files (Ignored as requested)
 *.csv
 *.xlsx
 *.xls
 *.tsv
+play.py
 
 # Logs and system files
 *.log
 .DS_Store
 .env
+*.spec
