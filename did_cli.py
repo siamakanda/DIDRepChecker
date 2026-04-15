@@ -30,7 +30,7 @@ try:
 except ImportError:
     CLIPBOARD_AVAILABLE = False
 
-from scraper_engine import scrape_numbers_sync, clean_number
+from scraper_engine import RoboKillerScraper, clean_number
 
 VERSION = "1.0.0"
 console = Console()
@@ -38,6 +38,7 @@ console = Console()
 
 class DIDScraperCLI:
     def __init__(self):
+        self.scraper = RoboKillerScraper()   # modular scraper instance
         self.numbers: List[str] = []
         self.results: List[Dict[str, str]] = []
         self.failed_numbers: List[str] = []
@@ -118,7 +119,7 @@ class DIDScraperCLI:
             return False
 
         console.print(f"\n[bold]Processing {len(self.numbers)} phone number(s)[/bold]")
-        console.print(f"Concurrent requests: {self._get_concurrency()} | Rate limit: {self._get_rate_limit()}/s\n")
+        console.print(f"Concurrent requests: {self.scraper.config['concurrent_requests']} | Rate limit: {self.scraper.config['requests_per_second']}/s\n")
 
         self.stats = {"positive": 0, "negative": 0, "other": 0, "errors": 0}
         self.results = []
@@ -154,12 +155,11 @@ class DIDScraperCLI:
                         description=f"[cyan]Scraping | ✅ Pos:{self.stats['positive']} ❌ Neg:{self.stats['negative']} ⚠️ Err:{self.stats['errors']}"
                     )
                     self.results.append(result)
-                except Exception as e:
-                    # Silently ignore callback errors to avoid crashing the scraper
+                except Exception:
                     pass
                 return True
 
-            self.results = scrape_numbers_sync(self.numbers, async_progress_callback)
+            self.results = self.scraper.scrape(self.numbers, async_progress_callback)
 
         console.print("\n[bold green]✅ Scraping completed successfully[/bold green]")
         self._show_summary()
@@ -183,14 +183,6 @@ class DIDScraperCLI:
         table.add_row("📭 Other / No Data", str(self.stats['other']), f"{other_pct:.1f}%")
         table.add_row("📞 Total", str(total), "100%")
         console.print(table)
-
-    def _get_concurrency(self) -> int:
-        from scraper_engine import CONFIG
-        return CONFIG.get("concurrent_requests", 30)
-
-    def _get_rate_limit(self) -> float:
-        from scraper_engine import CONFIG
-        return CONFIG.get("requests_per_second", 5.0)
 
     # ---------- Retry Failed Numbers ----------
     def retry_failed(self):
@@ -340,8 +332,6 @@ class DIDScraperCLI:
 
     # ---------- One Iteration (core logic) ----------
     def _run_once(self, args) -> bool:
-        """Execute one full scraping + post-processing + export cycle.
-        Returns True if successful, False if a fatal error occurred (e.g., no numbers)."""
         self.numbers = self.parse_input(args.numbers, args.file)
         if not self.numbers:
             console.print("[red]No valid phone numbers were provided. Skipping iteration.[/red]")
@@ -398,15 +388,12 @@ class DIDScraperCLI:
         self._show_banner()
 
         if args.once:
-            # Single run
             self._run_once(args)
         else:
-            # Continuous loop (default)
             iteration = 1
             while True:
                 console.print(f"\n[bold cyan]--- Loop iteration {iteration} ---[/bold cyan]")
                 success = self._run_once(args)
-                # Delay: 3 seconds on success, 5 seconds on failure (matching did_loop.py)
                 delay = 3 if success else 5
                 console.print(f"\n[dim]Waiting {delay} seconds before next iteration... (Ctrl+C to stop)[/dim]")
                 time.sleep(delay)

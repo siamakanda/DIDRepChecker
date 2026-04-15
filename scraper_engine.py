@@ -1,19 +1,22 @@
 """
-High-Speed Async Phone Scraper - Optimized for RoboKiller
+Modular, Reusable Scraper Engine for RoboKiller Lookup
+Can be used as a library, from CLI, or from an API.
 """
 
 import asyncio
 import aiohttp
 import random
 import time
-import logging
 import re
-from typing import List, Dict, Optional, Callable
+import logging
+from typing import List, Dict, Optional, Callable, Any
 from datetime import datetime
 from lxml import html
 
-# ========== CONFIGURATION ==========
-CONFIG = {
+# ----------------------------------------------------------------------
+# Configuration defaults
+# ----------------------------------------------------------------------
+DEFAULT_CONFIG = {
     "base_url": "https://lookup.robokiller.com",
     "concurrent_requests": 30,
     "timeout": 15,
@@ -25,11 +28,10 @@ CONFIG = {
     "keepalive_timeout": 30,
     "rotate_user_agents": True,
     "rotate_headers": True,
-    "header_shuffle_chance": 0.3,
     "referer_chance": 0.5,
 }
 
-# User Agents
+# User agents (shortened list – keep your full list)
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
@@ -48,7 +50,11 @@ REFERER_SOURCES = [
     "",
 ]
 
+# ----------------------------------------------------------------------
+# Helper functions (stateless)
+# ----------------------------------------------------------------------
 def clean_number(number) -> str:
+    """Extract 10-digit phone number from any input."""
     if not number or not isinstance(number, (str, int)):
         return ""
     cleaned = ''.join(filter(str.isdigit, str(number)))
@@ -56,7 +62,9 @@ def clean_number(number) -> str:
         cleaned = cleaned[1:]
     return cleaned if len(cleaned) == 10 else ""
 
+
 def get_random_headers() -> Dict[str, str]:
+    """Generate random HTTP headers for anti‑detection."""
     user_agent = random.choice(USER_AGENTS)
     browser_type = "Chrome"
     if "Firefox" in user_agent:
@@ -73,11 +81,13 @@ def get_random_headers() -> Dict[str, str]:
         "DNT": random.choice(["0", "1"]),
         "Connection": "keep-alive",
     }
-    if random.random() > CONFIG["referer_chance"]:
+    if random.random() > DEFAULT_CONFIG["referer_chance"]:
         headers["Referer"] = random.choice(REFERER_SOURCES)
     return headers
 
+
 def parse_robokiller_html(html_content: str, phone_number: str) -> Dict[str, str]:
+    """Extract reputation, status, calls, reports from RoboKiller HTML."""
     try:
         tree = html.fromstring(html_content)
         data = {
@@ -93,6 +103,7 @@ def parse_robokiller_html(html_content: str, phone_number: str) -> Dict[str, str
             data['reputation'] = "Not Found"
             data['robokiller_status'] = "N/A"
             return data
+
         found_reputation = False
         user_rep_div = tree.xpath('//div[@id="userReputation"]')
         if user_rep_div:
@@ -108,7 +119,8 @@ def parse_robokiller_html(html_content: str, phone_number: str) -> Dict[str, str
                 elif 'yellow' in class_attr or 'Neutral' in rep_text:
                     data['reputation'] = 'Neutral'
                 else:
-                    data['reputation'] = rep_text if rep_text else "Unknown"
+                    data['reputation'] = rep_text
+
         robo_status_div = tree.xpath('//div[@id="roboStatus"]')
         if robo_status_div:
             found_reputation = True
@@ -122,27 +134,29 @@ def parse_robokiller_html(html_content: str, phone_number: str) -> Dict[str, str
                     data['robokiller_status'] = 'Blocked'
                 else:
                     data['robokiller_status'] = status_text
+
         reports_div = tree.xpath('//div[@id="userReports"]')
         if reports_div:
             h3_texts = reports_div[0].xpath('.//h3/text()')
             if h3_texts:
-                reports_text = h3_texts[0].strip()
-                numbers = re.findall(r'[\d,]+', reports_text)
+                numbers = re.findall(r'[\d,]+', h3_texts[0].strip())
                 if numbers:
                     data['user_reports'] = numbers[0].replace(',', '')
+
         calls_div = tree.xpath('//div[@id="totalCall"]')
         if calls_div:
             h3_texts = calls_div[0].xpath('.//h3/text()')
             if h3_texts:
-                calls_text = h3_texts[0].strip()
-                numbers = re.findall(r'[\d,]+', calls_text)
+                numbers = re.findall(r'[\d,]+', h3_texts[0].strip())
                 if numbers:
                     data['total_calls'] = numbers[0].replace(',', '')
+
         last_call_div = tree.xpath('//div[@id="lastCall"]')
         if last_call_div:
             h3_texts = last_call_div[0].xpath('.//h3/text()')
             if h3_texts:
                 data['last_call'] = h3_texts[0].strip()
+
         if found_reputation:
             return data
         if len(html_content) > 5000:
@@ -162,6 +176,10 @@ def parse_robokiller_html(html_content: str, phone_number: str) -> Dict[str, str
             "scraped_at": datetime.now().isoformat(),
         }
 
+
+# ----------------------------------------------------------------------
+# Rate limiter (internal)
+# ----------------------------------------------------------------------
 class RateLimiter:
     def __init__(self, rate_per_second: float):
         self.rate = max(rate_per_second, 0.1)
@@ -170,6 +188,7 @@ class RateLimiter:
         self.updated_at = time.time()
         self.cooldown_until = 0.0
         self.failure_count = 0
+
     async def acquire(self):
         now = time.time()
         if now < self.cooldown_until:
@@ -184,80 +203,133 @@ class RateLimiter:
             self.tokens = self.capacity
             self.updated_at = time.time()
         self.tokens -= 1
+
     def record_429(self):
         backoff_seconds = min(10 * (2 ** self.failure_count), 120)
         self.cooldown_until = time.time() + backoff_seconds
         self.failure_count += 1
+
     def reset_failures(self):
         self.failure_count = max(0, self.failure_count - 1)
 
-async def fetch_single(session: aiohttp.ClientSession, phone_number: str, 
-                      semaphore: asyncio.Semaphore, rate_limiter: RateLimiter,
-                      progress_callback: Optional[Callable] = None) -> Dict[str, str]:
-    async with semaphore:
-        await rate_limiter.acquire()
-        formatted_number = f"{phone_number[:3]}-{phone_number[3:6]}-{phone_number[6:]}"
-        url = f"{CONFIG['base_url']}/p/{formatted_number}"
-        headers = get_random_headers()
-        timeout = aiohttp.ClientTimeout(
-            total=CONFIG["timeout"],
-            connect=CONFIG["connect_timeout"],
-            sock_read=CONFIG["sock_read_timeout"]
-        )
-        for attempt in range(CONFIG["max_retries"] + 1):
-            try:
-                async with session.get(url, headers=headers, timeout=timeout) as response:
-                    if response.status == 403:
-                        result = {"phone_number": phone_number, "reputation": "Blocked", "robokiller_status": "", "user_reports": "0", "total_calls": "0", "last_call": "N/A", "scraped_at": datetime.now().isoformat()}
-                        if progress_callback:
-                            await progress_callback(phone_number, result)
-                        return result
-                    elif response.status == 429:
-                        rate_limiter.record_429()
-                        await asyncio.sleep(2 ** attempt)
-                        continue
-                    elif response.status == 200:
-                        html_content = await response.text()
-                        block_indicators = ["captcha", "access denied", "cloudflare", "blocked"]
-                        if any(indicator in html_content.lower() for indicator in block_indicators):
-                            result = {"phone_number": phone_number, "reputation": "Blocked", "robokiller_status": "", "user_reports": "0", "total_calls": "0", "last_call": "N/A", "scraped_at": datetime.now().isoformat()}
-                            if progress_callback:
-                                await progress_callback(phone_number, result)
-                            return result
-                        result = parse_robokiller_html(html_content, phone_number)
-                        if progress_callback:
-                            await progress_callback(phone_number, result)
-                        return result
-                    else:
-                        result = {"phone_number": phone_number, "reputation": f"HTTP {response.status}", "robokiller_status": "", "user_reports": "0", "total_calls": "0", "last_call": "N/A", "scraped_at": datetime.now().isoformat()}
-                        if progress_callback:
-                            await progress_callback(phone_number, result)
-                        return result
-            except Exception as e:
-                if attempt == CONFIG["max_retries"]:
-                    result = {"phone_number": phone_number, "reputation": "Error", "robokiller_status": "", "user_reports": "0", "total_calls": "0", "last_call": "N/A", "scraped_at": datetime.now().isoformat()}
+
+# ----------------------------------------------------------------------
+# Main scraper class (API‑ready)
+# ----------------------------------------------------------------------
+class RoboKillerScraper:
+    """Reusable scraper for RoboKiller phone number lookup."""
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        self.config = DEFAULT_CONFIG.copy()
+        if config:
+            self.config.update(config)
+
+    async def _fetch_one(self, session: aiohttp.ClientSession,
+                         phone_number: str,
+                         semaphore: asyncio.Semaphore,
+                         rate_limiter: RateLimiter,
+                         progress_callback: Optional[Callable] = None) -> Dict[str, str]:
+        async with semaphore:
+            await rate_limiter.acquire()
+            formatted = f"{phone_number[:3]}-{phone_number[3:6]}-{phone_number[6:]}"
+            url = f"{self.config['base_url']}/p/{formatted}"
+            headers = get_random_headers()
+            timeout = aiohttp.ClientTimeout(
+                total=self.config["timeout"],
+                connect=self.config["connect_timeout"],
+                sock_read=self.config["sock_read_timeout"]
+            )
+            for attempt in range(self.config["max_retries"] + 1):
+                try:
+                    async with session.get(url, headers=headers, timeout=timeout) as resp:
+                        if resp.status == 403:
+                            result = self._error_result(phone_number, "Blocked")
+                        elif resp.status == 429:
+                            rate_limiter.record_429()
+                            await asyncio.sleep(2 ** attempt)
+                            continue
+                        elif resp.status == 200:
+                            html_content = await resp.text()
+                            block_indicators = ["captcha", "access denied", "cloudflare", "blocked"]
+                            if any(ind in html_content.lower() for ind in block_indicators):
+                                result = self._error_result(phone_number, "Blocked")
+                            else:
+                                result = parse_robokiller_html(html_content, phone_number)
+                        else:
+                            result = self._error_result(phone_number, f"HTTP {resp.status}")
+                except asyncio.TimeoutError:
+                    result = self._error_result(phone_number, "Timeout")
+                except aiohttp.ClientConnectorError:
+                    result = self._error_result(phone_number, "ConnectionError")
+                except Exception:
+                    result = self._error_result(phone_number, "Error")
+                else:
                     if progress_callback:
                         await progress_callback(phone_number, result)
                     return result
-                await asyncio.sleep(1 * (attempt + 1))
-        result = {"phone_number": phone_number, "reputation": "Error", "robokiller_status": "", "user_reports": "0", "total_calls": "0", "last_call": "N/A", "scraped_at": datetime.now().isoformat()}
-        if progress_callback:
-            await progress_callback(phone_number, result)
-        return result
 
-async def run_scraper(phone_numbers: List[str], progress_callback: Optional[Callable] = None) -> List[Dict[str, str]]:
-    connector = aiohttp.TCPConnector(
-        limit=CONFIG["connection_limit"],
-        keepalive_timeout=CONFIG["keepalive_timeout"],
-        force_close=False,
-    )
-    rate_limiter = RateLimiter(CONFIG["requests_per_second"])
-    semaphore = asyncio.Semaphore(CONFIG["concurrent_requests"])
-    async with aiohttp.ClientSession(connector=connector) as session:
-        tasks = [fetch_single(session, number, semaphore, rate_limiter, progress_callback) for number in phone_numbers]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        valid_results = [r for r in results if not isinstance(r, Exception)]
-        return valid_results
+                if attempt < self.config["max_retries"]:
+                    await asyncio.sleep(1 * (attempt + 1))
 
-def scrape_numbers_sync(phone_numbers: List[str], progress_callback: Optional[Callable] = None) -> List[Dict[str, str]]:
-    return asyncio.run(run_scraper(phone_numbers, progress_callback))
+            result = self._error_result(phone_number, "Error")
+            if progress_callback:
+                await progress_callback(phone_number, result)
+            return result
+
+    def _error_result(self, phone_number: str, reason: str) -> Dict[str, str]:
+        return {
+            "phone_number": phone_number,
+            "reputation": reason,
+            "robokiller_status": "",
+            "user_reports": "0",
+            "total_calls": "0",
+            "last_call": "N/A",
+            "scraped_at": datetime.now().isoformat(),
+        }
+
+    async def scrape_async(self,
+                           phone_numbers: List[str],
+                           progress_callback: Optional[Callable] = None) -> List[Dict[str, str]]:
+        """Asynchronous scrape – ideal for API endpoints."""
+        if not phone_numbers:
+            return []
+        connector = aiohttp.TCPConnector(
+            limit=self.config["connection_limit"],
+            keepalive_timeout=self.config["keepalive_timeout"],
+            force_close=False,
+        )
+        rate_limiter = RateLimiter(self.config["requests_per_second"])
+        semaphore = asyncio.Semaphore(self.config["concurrent_requests"])
+        async with aiohttp.ClientSession(connector=connector) as session:
+            tasks = [
+                self._fetch_one(session, num, semaphore, rate_limiter, progress_callback)
+                for num in phone_numbers
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            return [r for r in results if not isinstance(r, Exception)]
+
+    def scrape(self,
+               phone_numbers: List[str],
+               progress_callback: Optional[Callable] = None) -> List[Dict[str, str]]:
+        """Synchronous wrapper – convenient for CLI."""
+        if progress_callback is not None and not asyncio.iscoroutinefunction(progress_callback):
+            async def async_cb(num, res):
+                progress_callback(num, res)
+                return True
+            cb = async_cb
+        else:
+            cb = progress_callback
+        return asyncio.run(self.scrape_async(phone_numbers, cb))
+
+
+# ----------------------------------------------------------------------
+# Backward compatibility for existing CLI scripts
+# ----------------------------------------------------------------------
+_legacy_scraper = RoboKillerScraper()
+
+def scrape_numbers_sync(phone_numbers: List[str],
+                        progress_callback: Optional[Callable] = None) -> List[Dict[str, str]]:
+    """Legacy synchronous wrapper (kept for compatibility)."""
+    return _legacy_scraper.scrape(phone_numbers, progress_callback)
+
+__all__ = ["RoboKillerScraper", "clean_number", "scrape_numbers_sync", "DEFAULT_CONFIG"]
