@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      width: 650px;
+      max-height: 700px;
+      margin: 0;
+      padding: 12px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f5f5;
+      font-size: 13px;
+    }
+    h3 { margin: 0 0 8px 0; font-size: 16px; }
+    .section {
+      background: white;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .section-title {
+      font-weight: bold;
+      margin-bottom: 8px;
+      border-left: 4px solid #007bff;
+      padding-left: 8px;
+    }
+    .number-list {
+      max-height: 150px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 5px;
+      background: #fafafa;
+      font-size: 12px;
+    }
+    .number-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 2px 0;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-right: 8px;
+      margin-top: 8px;
+    }
+    button:hover { background-color: #0056b3; }
+    button.secondary { background-color: #6c757d; }
+    button.secondary:hover { background-color: #5a6268; }
+    button.success { background-color: #28a745; }
+    button.success:hover { background-color: #218838; }
+    .input-small { width: 60px; padding: 4px; margin: 0 4px; }
+    .filter-row { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 6px 4px;
+      text-align: left;
+    }
+    th {
+      background-color: #f0f0f0;
+      cursor: pointer;
+      user-select: none;
+    }
+    th:hover { background-color: #e0e0e0; }
+    .results-container {
+      max-height: 250px;
+      overflow-y: auto;
+    }
+    .status { font-size: 12px; color: #666; margin-top: 5px; }
+    .error { color: red; }
+    .success { color: green; }
+    .settings {
+      font-size: 12px;
+      border-top: 1px solid #ddd;
+      margin-top: 8px;
+      padding-top: 8px;
+    }
+    .api-url-item { display: flex; gap: 5px; margin-bottom: 4px; align-items: center; }
+    .api-url-item input { flex: 1; }
+    .remove-url { background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; padding: 2px 6px; }
+  </style>
+</head>
+<body>
+  <h3>📞 DID Reputation Selector</h3>
+  <div class="section">
+    <div class="section-title">📋 Numbers on Page</div>
+    <div id="numbersContainer" class="number-list">Loading...</div>
+    <div>
+      <button id="sendSelectedBtn" class="success">Send Selected</button>
+      <span>Top <input type="number" id="topNPage" value="70" min="1" class="input-small"> from page</span>
+      <button id="sendTopPageBtn">Send Top N</button>
+    </div>
+  </div>
+
+  <div class="section" id="resultsSection" style="display:none;">
+    <div class="section-title">📊 API Results</div>
+    <div class="filter-row">
+      <span>Filter:</span>
+      <select id="filterSelect">
+        <option value="all">All</option>
+        <option value="Positive">✅ Positive</option>
+        <option value="Negative">❌ Negative</option>
+        <option value="Neutral">🟡 Neutral</option>
+        <option value="Blocked">🚫 Blocked/Error</option>
+      </select>
+      <span>Sort by:</span>
+      <select id="sortSelect">
+        <option value="total_calls">Total Calls</option>
+        <option value="user_reports">User Reports</option>
+        <option value="reputation">Reputation</option>
+        <option value="phone_number">Phone Number</option>
+      </select>
+      <button id="sortAscBtn">▲ Asc</button>
+      <button id="sortDescBtn">▼ Desc</button>
+    </div>
+    <div class="results-container">
+      <table id="resultsTable">
+        <thead>
+          <tr><th data-field="phone_number">DID</th><th data-field="reputation">Reputation</th><th data-field="robokiller_status">Robokiller</th><th data-field="total_calls">Total Calls</th><th data-field="user_reports">Reports</th><th data-field="last_call">Last Call</th></tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+    <div>
+      <span>Select top <input type="number" id="topNResults" value="20" min="1" class="input-small"> from results</span>
+      <button id="selectTopResultsBtn">✅ Select on Page</button>
+      <button id="copyResultsBtn">📋 Copy DIDs</button>
+    </div>
+  </div>
+
+  <div class="settings">
+    <div class="section-title">⚙️ API Endpoints (fallback order)</div>
+    <div id="apiUrlsList"></div>
+    <div style="display: flex; gap: 5px; margin-top: 5px;">
+      <input type="text" id="newApiUrl" placeholder="http://.../scrape" style="flex:1;">
+      <button id="addApiUrlBtn">Add</button>
+    </div>
+    <div id="apiStatus" class="status"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

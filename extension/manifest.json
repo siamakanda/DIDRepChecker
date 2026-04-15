@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "DID Reputation Selector",
+  "version": "1.0",
+  "description": "Extract phone numbers from page, send to reputation API, sort/filter results, and auto-select checkboxes.",
+  "permissions": ["activeTab", "scripting", "storage", "clipboardWrite"],
+  "host_permissions": [
+    "http://localhost:5000/",
+    "http://127.0.0.1:5000/",
+    "https://animate.peerlessnetwork.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "DID Reputation Selector"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://animate.peerlessnetwork.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
