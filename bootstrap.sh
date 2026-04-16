@@ -25,7 +25,7 @@ else
     cd "$REPO_DIR"
 fi
 
-# Enter the server directory (where the actual Flask app lives)
+# IMPORTANT: Enter the server directory where the deployment script lives
 cd server
 
 # Make the deployment script executable and run it
