@@ -1,4 +1,4 @@
-// popup.js – Orchestrates UI, API calls, selection, and statistics
+// popup.js – Full version with persistent settings and row selection
 
 // DOM elements
 const numbersContainer = document.getElementById("numbersContainer");
@@ -15,6 +15,7 @@ const sortAscBtn = document.getElementById("sortAscBtn");
 const sortDescBtn = document.getElementById("sortDescBtn");
 const topNResultsInput = document.getElementById("topNResults");
 const selectTopResultsBtn = document.getElementById("selectTopResultsBtn");
+const selectCheckedResultsBtn = document.getElementById("selectCheckedResultsBtn");
 const copyResultsBtn = document.getElementById("copyResultsBtn");
 const exportResultsBtn = document.getElementById("exportResultsBtn");
 const apiUrlsListDiv = document.getElementById("apiUrlsList");
@@ -23,6 +24,7 @@ const addApiUrlBtn = document.getElementById("addApiUrlBtn");
 const apiStatus = document.getElementById("apiStatus");
 const clearStorageBtn = document.getElementById("clearStorageBtn");
 const progressOverlay = document.getElementById("progressOverlay");
+const selectAllRowsCheckbox = document.getElementById("selectAllRows");
 
 // Data
 let capturedNumbers = [];
@@ -32,6 +34,38 @@ let currentSortField = "total_calls";
 let currentSortAsc = true;
 let currentFilter = "all";
 let lastSelectedCount = 0;
+let lastSentCount = 0;
+
+// ---------- Persistence Keys ----------
+const PREF_KEYS = {
+    filter: "pref_filter",
+    sortField: "pref_sortField",
+    sortAsc: "pref_sortAsc",
+    topNPage: "pref_topNPage",
+    topNResults: "pref_topNResults"
+};
+
+async function savePreferences() {
+    const prefs = {
+        [PREF_KEYS.filter]: filterSelect.value,
+        [PREF_KEYS.sortField]: sortSelect.value,
+        [PREF_KEYS.sortAsc]: currentSortAsc,
+        [PREF_KEYS.topNPage]: topNPageInput.value,
+        [PREF_KEYS.topNResults]: topNResultsInput.value
+    };
+    await chrome.storage.local.set(prefs);
+}
+
+async function loadPreferences() {
+    const prefs = await chrome.storage.local.get(Object.values(PREF_KEYS));
+    if (prefs[PREF_KEYS.filter]) filterSelect.value = prefs[PREF_KEYS.filter];
+    if (prefs[PREF_KEYS.sortField]) sortSelect.value = prefs[PREF_KEYS.sortField];
+    if (typeof prefs[PREF_KEYS.sortAsc] === 'boolean') currentSortAsc = prefs[PREF_KEYS.sortAsc];
+    if (prefs[PREF_KEYS.topNPage]) topNPageInput.value = prefs[PREF_KEYS.topNPage];
+    if (prefs[PREF_KEYS.topNResults]) topNResultsInput.value = prefs[PREF_KEYS.topNResults];
+    currentSortField = sortSelect.value;
+    renderResultsTable();
+}
 
 // Tabs
 const tabs = document.querySelectorAll(".tab");
@@ -56,9 +90,22 @@ function showProgress(show) {
 
 function updateStats() {
     document.getElementById("statCaptured").innerText = capturedNumbers.length;
-    document.getElementById("statSent").innerText = selectedNumbersToSend.length;
+    document.getElementById("statSent").innerText = lastSentCount;
     document.getElementById("statResults").innerText = apiResults.length;
     document.getElementById("statSelectedOnPage").innerText = lastSelectedCount;
+}
+
+// Clear API results
+async function clearApiResults() {
+    apiResults = [];
+    lastSentCount = 0;
+    await chrome.runtime.sendMessage({ action: "storeApiResults", results: [] });
+    resultsPlaceholder.style.display = "block";
+    resultsContent.style.display = "none";
+    apiStatus.innerText = "Results cleared.";
+    updateStats();
+    updateFilterDropdown();
+    renderResultsTable();
 }
 
 // Load captured numbers from storage
@@ -66,7 +113,13 @@ async function loadCapturedNumbers() {
     numbersContainer.innerHTML = "Loading numbers...";
     try {
         const response = await chrome.runtime.sendMessage({ action: "getCapturedNumbers" });
-        capturedNumbers = response.numbers || [];
+        const newNumbers = response.numbers || [];
+        if (JSON.stringify(capturedNumbers) !== JSON.stringify(newNumbers)) {
+            await clearApiResults();
+            lastSelectedCount = 0;
+            await chrome.storage.local.set({ lastSelectedCount: 0 });
+        }
+        capturedNumbers = newNumbers;
         if (capturedNumbers.length) {
             renderNumberList();
         } else {
@@ -106,6 +159,7 @@ async function callReputationApi(numbers, description = "numbers") {
         apiStatus.innerText = "No numbers to send.";
         return false;
     }
+    lastSentCount = numbers.length;
     showProgress(true);
     apiStatus.innerText = `Checking reputation for ${numbers.length} ${description}...`;
     resultsPlaceholder.style.display = "block";
@@ -115,6 +169,7 @@ async function callReputationApi(numbers, description = "numbers") {
         if (response.success) {
             apiResults = response.data;
             await chrome.runtime.sendMessage({ action: "storeApiResults", results: apiResults });
+            updateFilterDropdown();
             renderResultsTable();
             resultsPlaceholder.style.display = "none";
             resultsContent.style.display = "block";
@@ -136,7 +191,41 @@ async function callReputationApi(numbers, description = "numbers") {
     }
 }
 
+function updateFilterDropdown() {
+    if (!apiResults.length) {
+        filterSelect.innerHTML = `<option value="all">All (0)</option>
+                                  <option value="Positive">✅ Positive (0)</option>
+                                  <option value="Negative">❌ Negative (0)</option>
+                                  <option value="Neutral">🟡 Neutral / Not Found (0)</option>
+                                  <option value="Blocked">🚫 Blocked / Error (0)</option>`;
+        return;
+    }
+    const positiveCount = apiResults.filter(r => r.reputation === 'Positive').length;
+    const negativeCount = apiResults.filter(r => r.reputation === 'Negative').length;
+    const neutralCount = apiResults.filter(r => ['Neutral', 'Not Found', 'No Data Available'].includes(r.reputation)).length;
+    const blockedCount = apiResults.filter(r => ['Blocked', 'Error', 'Parse Error', 'HTTP'].some(e => r.reputation.includes(e))).length;
+    const allCount = apiResults.length;
+
+    const currentValue = filterSelect.value;
+    filterSelect.innerHTML = `
+        <option value="all">All (${allCount})</option>
+        <option value="Positive">✅ Positive (${positiveCount})</option>
+        <option value="Negative">❌ Negative (${negativeCount})</option>
+        <option value="Neutral">🟡 Neutral / Not Found (${neutralCount})</option>
+        <option value="Blocked">🚫 Blocked / Error (${blockedCount})</option>
+    `;
+    filterSelect.value = currentValue;
+}
+
 function renderResultsTable() {
+    if (!apiResults.length) {
+        document.getElementById("resultsBody").innerHTML = '<tr><td colspan="7" class="empty-state">No results to display.</td></tr>';
+        document.getElementById("displayedCount").innerText = "0";
+        document.getElementById("totalResultCount").innerText = "0";
+        if (selectAllRowsCheckbox) selectAllRowsCheckbox.checked = false;
+        return;
+    }
+
     let filtered = [...apiResults];
     if (currentFilter !== "all") {
         filtered = filtered.filter(r => r.reputation === currentFilter);
@@ -152,18 +241,35 @@ function renderResultsTable() {
         if (aVal > bVal) return currentSortAsc ? 1 : -1;
         return 0;
     });
+
     const tbody = document.getElementById("resultsBody");
     tbody.innerHTML = "";
     filtered.forEach(res => {
         const row = tbody.insertRow();
-        row.insertCell(0).innerText = res.phone_number;
-        row.insertCell(1).innerText = res.reputation;
-        row.insertCell(2).innerText = res.robokiller_status || "";
-        row.insertCell(3).innerText = res.total_calls || "0";
-        row.insertCell(4).innerText = res.user_reports || "0";
-        row.insertCell(5).innerText = res.last_call || "N/A";
+        const cbCell = row.insertCell(0);
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "row-checkbox";
+        cb.dataset.number = res.phone_number;
+        cbCell.appendChild(cb);
+        row.insertCell(1).innerText = res.phone_number;
+        row.insertCell(2).innerText = res.reputation;
+        row.insertCell(3).innerText = res.robokiller_status || "";
+        row.insertCell(4).innerText = res.total_calls || "0";
+        row.insertCell(5).innerText = res.user_reports || "0";
+        row.insertCell(6).innerText = res.last_call || "N/A";
     });
+
+    document.getElementById("displayedCount").innerText = filtered.length;
+    document.getElementById("totalResultCount").innerText = apiResults.length;
     updateStats();
+
+    const allCheckboxes = document.querySelectorAll('.row-checkbox');
+    const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+    if (selectAllRowsCheckbox) {
+        selectAllRowsCheckbox.checked = allCheckboxes.length > 0 && checkedBoxes.length === allCheckboxes.length;
+        selectAllRowsCheckbox.indeterminate = checkedBoxes.length > 0 && checkedBoxes.length < allCheckboxes.length;
+    }
 }
 
 function getTopResultsNumbers(n) {
@@ -183,6 +289,11 @@ function getTopResultsNumbers(n) {
         return 0;
     });
     return filtered.slice(0, n).map(r => r.phone_number);
+}
+
+function getCheckedNumbersFromResults() {
+    const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+    return Array.from(checkboxes).map(cb => cb.dataset.number);
 }
 
 async function selectNumbersOnPage(numbers) {
@@ -271,6 +382,7 @@ sendTopPageBtn.addEventListener("click", () => {
     if (isNaN(n) || n <= 0) n = capturedNumbers.length;
     const topNumbers = capturedNumbers.slice(0, n);
     callReputationApi(topNumbers, `top ${n} from page`);
+    savePreferences();
 });
 selectAllBtn.addEventListener("click", () => {
     document.querySelectorAll('.num-checkbox').forEach(cb => { cb.checked = true; });
@@ -282,18 +394,22 @@ deselectAllBtn.addEventListener("click", () => {
 });
 filterSelect.addEventListener("change", () => {
     currentFilter = filterSelect.value;
+    savePreferences();
     renderResultsTable();
 });
 sortSelect.addEventListener("change", () => {
     currentSortField = sortSelect.value;
+    savePreferences();
     renderResultsTable();
 });
 sortAscBtn.addEventListener("click", () => {
     currentSortAsc = true;
+    savePreferences();
     renderResultsTable();
 });
 sortDescBtn.addEventListener("click", () => {
     currentSortAsc = false;
+    savePreferences();
     renderResultsTable();
 });
 selectTopResultsBtn.addEventListener("click", () => {
@@ -305,18 +421,34 @@ selectTopResultsBtn.addEventListener("click", () => {
     if (isNaN(n) || n <= 0) n = apiResults.length;
     const numbers = getTopResultsNumbers(n);
     selectNumbersOnPage(numbers);
+    savePreferences();
+});
+selectCheckedResultsBtn.addEventListener("click", () => {
+    const numbers = getCheckedNumbersFromResults();
+    if (numbers.length) {
+        selectNumbersOnPage(numbers);
+    } else {
+        apiStatus.innerText = "No rows checked in results table.";
+    }
 });
 copyResultsBtn.addEventListener("click", async () => {
     const numbers = getTopResultsNumbers(999999);
     if (!numbers.length) return;
-    try {
-        await navigator.clipboard.writeText(numbers.join("\n"));
-        apiStatus.innerText = `✅ Copied ${numbers.length} DIDs to clipboard.`;
-    } catch (err) {
-        apiStatus.innerText = "❌ Copy failed: " + err.message;
-    }
+    await navigator.clipboard.writeText(numbers.join("\n"));
+    apiStatus.innerText = `✅ Copied ${numbers.length} DIDs to clipboard.`;
 });
 exportResultsBtn.addEventListener("click", exportResultsCSV);
+topNPageInput.addEventListener("change", savePreferences);
+topNResultsInput.addEventListener("change", savePreferences);
+
+// Select all rows checkbox
+if (selectAllRowsCheckbox) {
+    selectAllRowsCheckbox.addEventListener("change", (e) => {
+        const isChecked = e.target.checked;
+        document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = isChecked);
+    });
+}
+
 addApiUrlBtn.addEventListener("click", async () => {
     let newUrl = newApiUrlInput.value.trim();
     if (!newUrl) return;
@@ -335,28 +467,40 @@ addApiUrlBtn.addEventListener("click", async () => {
 clearStorageBtn.addEventListener("click", async () => {
     await chrome.runtime.sendMessage({ action: "clearStoredData" });
     apiResults = [];
+    lastSentCount = 0;
+    lastSelectedCount = 0;
+    await chrome.storage.local.set({ lastSelectedCount: 0 });
     resultsPlaceholder.style.display = "block";
     resultsContent.style.display = "none";
     apiStatus.innerText = "Stored results cleared.";
     loadCapturedNumbers();
 });
 
-// Load stored selected count on start
+// Load stored selected count and preferences
 chrome.storage.local.get(['lastSelectedCount'], (res) => {
     lastSelectedCount = res.lastSelectedCount || 0;
     updateStats();
 });
 
 // Initial loads
+loadPreferences();
 loadCapturedNumbers();
 loadApiUrls();
-// Load previously stored API results if any
 chrome.runtime.sendMessage({ action: "getApiResults" }, (response) => {
     if (response.results && response.results.length) {
         apiResults = response.results;
+        updateFilterDropdown();
         renderResultsTable();
         resultsPlaceholder.style.display = "none";
         resultsContent.style.display = "block";
         updateStats();
     }
 });
+
+// Add "Clear Results" button to Results tab's sticky bar
+const clearResultsBtn = document.createElement("button");
+clearResultsBtn.innerText = "🗑️ Clear Results";
+clearResultsBtn.className = "secondary";
+clearResultsBtn.style.marginLeft = "auto";
+clearResultsBtn.addEventListener("click", clearApiResults);
+document.querySelector("#resultsPanel .sticky-bar").appendChild(clearResultsBtn);

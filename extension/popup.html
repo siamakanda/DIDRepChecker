@@ -5,8 +5,8 @@
   <style>
     * { box-sizing: border-box; }
     body {
-      width: 720px;
-      max-height: 680px;
+      width: 760px;
+      max-height: 700px;
       margin: 0;
       padding: 0;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -45,13 +45,8 @@
       font-size: 12px;
       font-weight: 500;
     }
-    .stats-bar div {
-      color: #333;
-    }
-    .stats-bar span {
-      font-weight: bold;
-      color: #007bff;
-    }
+    .stats-bar div { color: #333; }
+    .stats-bar span { font-weight: bold; color: #007bff; }
     /* Panels */
     .panel {
       display: none;
@@ -126,6 +121,7 @@
       position: sticky;
       top: 0;
     }
+    .checkbox-col { width: 30px; text-align: center; }
     .filter-row {
       display: flex;
       gap: 8px;
@@ -168,6 +164,12 @@
     .api-url-item { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
     .api-url-item input { flex: 1; }
     .status { font-size: 12px; margin-top: 8px; color: #666; }
+    .results-footer {
+      margin-top: 8px;
+      text-align: right;
+      font-size: 12px;
+      color: #666;
+    }
   </style>
 </head>
 <body>
@@ -224,13 +226,27 @@
     </div>
     <div class="results-container">
       <table id="resultsTable">
-        <thead><tr><th data-field="phone_number">DID</th><th data-field="reputation">Reputation</th><th data-field="robokiller_status">Robokiller</th><th data-field="total_calls">Total Calls</th><th data-field="user_reports">Reports</th><th data-field="last_call">Last Call</th></tr></thead>
+        <thead>
+          <tr>
+            <th class="checkbox-col"><input type="checkbox" id="selectAllRows"></th>
+            <th data-field="phone_number">DID</th>
+            <th data-field="reputation">Reputation</th>
+            <th data-field="robokiller_status">Robokiller</th>
+            <th data-field="total_calls">Total Calls</th>
+            <th data-field="user_reports">Reports</th>
+            <th data-field="last_call">Last Call</th>
+          </tr>
+        </thead>
         <tbody id="resultsBody"></tbody>
       </table>
+    </div>
+    <div class="results-footer">
+      Showing <span id="displayedCount">0</span> of <span id="totalResultCount">0</span> DIDs
     </div>
     <div class="sticky-bar">
       <span>Top <input type="number" id="topNResults" value="20" min="1" class="input-small"> from results</span>
       <button id="selectTopResultsBtn" class="success">🔘 Select on Page (Top N)</button>
+      <button id="selectCheckedResultsBtn" class="success">🔘 Select Checked on Page</button>
       <button id="exportResultsBtn" class="secondary">💾 Export to CSV</button>
     </div>
   </div>
