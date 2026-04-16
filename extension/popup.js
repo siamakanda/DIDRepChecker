@@ -1,4 +1,4 @@
-// popup.js – orchestrates UI, API calls, selection
+// popup.js – Orchestrates UI, API calls, selection, and statistics
 
 // DOM elements
 const numbersContainer = document.getElementById("numbersContainer");
@@ -31,6 +31,7 @@ let apiResults = [];
 let currentSortField = "total_calls";
 let currentSortAsc = true;
 let currentFilter = "all";
+let lastSelectedCount = 0;
 
 // Tabs
 const tabs = document.querySelectorAll(".tab");
@@ -53,6 +54,13 @@ function showProgress(show) {
     progressOverlay.style.display = show ? "flex" : "none";
 }
 
+function updateStats() {
+    document.getElementById("statCaptured").innerText = capturedNumbers.length;
+    document.getElementById("statSent").innerText = selectedNumbersToSend.length;
+    document.getElementById("statResults").innerText = apiResults.length;
+    document.getElementById("statSelectedOnPage").innerText = lastSelectedCount;
+}
+
 // Load captured numbers from storage
 async function loadCapturedNumbers() {
     numbersContainer.innerHTML = "Loading numbers...";
@@ -65,6 +73,7 @@ async function loadCapturedNumbers() {
             numbersContainer.innerHTML = '<div class="empty-state">📭 No numbers captured yet. Refresh the Peerless page.</div>';
             selectedNumbersToSend = [];
         }
+        updateStats();
     } catch (err) {
         numbersContainer.innerHTML = `<div class="empty-state">⚠️ Error: ${err.message}</div>`;
     }
@@ -82,21 +91,23 @@ function renderNumberList() {
     document.querySelectorAll('.num-checkbox').forEach(cb => {
         cb.addEventListener('change', updateSelectedNumbers);
     });
+    updateStats();
 }
 
 function updateSelectedNumbers() {
     const checkboxes = document.querySelectorAll('.num-checkbox');
     selectedNumbersToSend = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+    updateStats();
 }
 
 // API call to reputation server
-async function callReputationApi(numbers) {
+async function callReputationApi(numbers, description = "numbers") {
     if (!numbers.length) {
         apiStatus.innerText = "No numbers to send.";
         return false;
     }
     showProgress(true);
-    apiStatus.innerText = "Calling reputation API...";
+    apiStatus.innerText = `Checking reputation for ${numbers.length} ${description}...`;
     resultsPlaceholder.style.display = "block";
     resultsContent.style.display = "none";
     try {
@@ -107,7 +118,8 @@ async function callReputationApi(numbers) {
             renderResultsTable();
             resultsPlaceholder.style.display = "none";
             resultsContent.style.display = "block";
-            apiStatus.innerText = `✅ API returned ${apiResults.length} results.`;
+            apiStatus.innerText = `✅ Received ${apiResults.length} reputation results.`;
+            updateStats();
             return true;
         } else {
             apiStatus.innerText = `❌ API error: ${response.error}`;
@@ -151,6 +163,7 @@ function renderResultsTable() {
         row.insertCell(4).innerText = res.user_reports || "0";
         row.insertCell(5).innerText = res.last_call || "N/A";
     });
+    updateStats();
 }
 
 function getTopResultsNumbers(n) {
@@ -175,11 +188,14 @@ function getTopResultsNumbers(n) {
 async function selectNumbersOnPage(numbers) {
     if (!numbers.length) return;
     showProgress(true);
-    apiStatus.innerText = `Selecting ${numbers.length} numbers on page...`;
+    apiStatus.innerText = `Selecting ${numbers.length} numbers on Peerless page...`;
     try {
         const response = await chrome.runtime.sendMessage({ action: "selectNumbersOnPage", numbers: numbers });
         if (response && response.success) {
-            apiStatus.innerText = `✅ Selected ${response.selected} numbers on page.`;
+            lastSelectedCount = response.selected;
+            await chrome.storage.local.set({ lastSelectedCount: lastSelectedCount });
+            updateStats();
+            apiStatus.innerText = `✅ Selected ${lastSelectedCount} numbers on page.`;
         } else {
             apiStatus.innerText = `❌ Selection error: ${response?.error || "unknown"}`;
         }
@@ -230,7 +246,6 @@ function renderApiUrls(urls) {
     });
 }
 
-// Export results as CSV
 function exportResultsCSV() {
     if (!apiResults.length) {
         apiStatus.innerText = "No results to export.";
@@ -250,12 +265,12 @@ function exportResultsCSV() {
 }
 
 // Event listeners
-sendSelectedBtn.addEventListener("click", () => callReputationApi(selectedNumbersToSend));
+sendSelectedBtn.addEventListener("click", () => callReputationApi(selectedNumbersToSend, "selected numbers"));
 sendTopPageBtn.addEventListener("click", () => {
     let n = parseInt(topNPageInput.value);
     if (isNaN(n) || n <= 0) n = capturedNumbers.length;
     const topNumbers = capturedNumbers.slice(0, n);
-    callReputationApi(topNumbers);
+    callReputationApi(topNumbers, `top ${n} from page`);
 });
 selectAllBtn.addEventListener("click", () => {
     document.querySelectorAll('.num-checkbox').forEach(cb => { cb.checked = true; });
@@ -283,7 +298,7 @@ sortDescBtn.addEventListener("click", () => {
 });
 selectTopResultsBtn.addEventListener("click", () => {
     if (!apiResults.length) {
-        apiStatus.innerText = "No API results to select from.";
+        apiStatus.innerText = "No reputation results to select from.";
         return;
     }
     let n = parseInt(topNResultsInput.value);
@@ -312,7 +327,7 @@ addApiUrlBtn.addEventListener("click", async () => {
         await chrome.runtime.sendMessage({ action: "saveApiUrls", urls: urls });
         renderApiUrls(urls);
         newApiUrlInput.value = "";
-        apiStatus.innerText = "✅ API endpoint added.";
+        apiStatus.innerText = "✅ Endpoint added.";
     } else {
         apiStatus.innerText = "URL already exists.";
     }
@@ -323,11 +338,16 @@ clearStorageBtn.addEventListener("click", async () => {
     resultsPlaceholder.style.display = "block";
     resultsContent.style.display = "none";
     apiStatus.innerText = "Stored results cleared.";
-    // Also reload captured numbers
     loadCapturedNumbers();
 });
 
-// Initial load
+// Load stored selected count on start
+chrome.storage.local.get(['lastSelectedCount'], (res) => {
+    lastSelectedCount = res.lastSelectedCount || 0;
+    updateStats();
+});
+
+// Initial loads
 loadCapturedNumbers();
 loadApiUrls();
 // Load previously stored API results if any
@@ -337,5 +357,6 @@ chrome.runtime.sendMessage({ action: "getApiResults" }, (response) => {
         renderResultsTable();
         resultsPlaceholder.style.display = "none";
         resultsContent.style.display = "block";
+        updateStats();
     }
 });

@@ -5,8 +5,8 @@
   <style>
     * { box-sizing: border-box; }
     body {
-      width: 700px;
-      max-height: 650px;
+      width: 720px;
+      max-height: 680px;
       margin: 0;
       padding: 0;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -33,6 +33,23 @@
     .tab.active {
       background: white;
       border-bottom: 3px solid #007bff;
+      color: #007bff;
+    }
+    /* Stats bar */
+    .stats-bar {
+      display: flex;
+      gap: 20px;
+      padding: 8px 15px;
+      background: #e9ecef;
+      border-bottom: 1px solid #ddd;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .stats-bar div {
+      color: #333;
+    }
+    .stats-bar span {
+      font-weight: bold;
       color: #007bff;
     }
     /* Panels */
@@ -69,7 +86,9 @@
     }
     button:hover { background: #0056b3; }
     button.secondary { background: #6c757d; }
+    button.secondary:hover { background: #5a6268; }
     button.success { background: #28a745; }
+    button.success:hover { background: #218838; }
     .number-list {
       max-height: 280px;
       overflow-y: auto;
@@ -158,16 +177,24 @@
   <button class="tab" data-tab="settings">⚙️ Settings</button>
 </div>
 
+<!-- Statistics Bar -->
+<div class="stats-bar">
+  <div>📦 Captured: <span id="statCaptured">0</span></div>
+  <div>📤 Sent: <span id="statSent">0</span></div>
+  <div>📊 Results: <span id="statResults">0</span></div>
+  <div>✅ Selected on Page: <span id="statSelectedOnPage">0</span></div>
+</div>
+
 <!-- Numbers Panel -->
 <div id="numbersPanel" class="panel active-panel">
   <div class="number-list" id="numbersContainer">Loading numbers...</div>
   <div class="sticky-bar">
-    <button id="selectAllBtn" class="secondary">✅ Select All</button>
-    <button id="deselectAllBtn" class="secondary">❌ Deselect All</button>
-    <button id="sendSelectedBtn" class="success">📤 Send Selected</button>
+    <button id="selectAllBtn" class="secondary">✅ Check All</button>
+    <button id="deselectAllBtn" class="secondary">❌ Uncheck All</button>
+    <button id="sendSelectedBtn" class="success">📤 Check Reputation (Selected)</button>
     <div style="flex:1"></div>
     <span>Top <input type="number" id="topNPage" value="70" min="1" class="input-small"> from page</span>
-    <button id="sendTopPageBtn">📡 Send Top N</button>
+    <button id="sendTopPageBtn">📤 Check Top N from Page</button>
   </div>
 </div>
 
@@ -193,7 +220,7 @@
       </select>
       <button id="sortAscBtn">▲ Asc</button>
       <button id="sortDescBtn">▼ Desc</button>
-      <button id="copyResultsBtn" class="secondary">📋 Copy DIDs</button>
+      <button id="copyResultsBtn" class="secondary">📋 Copy DIDs to Clipboard</button>
     </div>
     <div class="results-container">
       <table id="resultsTable">
@@ -202,9 +229,9 @@
       </table>
     </div>
     <div class="sticky-bar">
-      <span>Select top <input type="number" id="topNResults" value="20" min="1" class="input-small"> from results</span>
-      <button id="selectTopResultsBtn" class="success">✅ Select on Page</button>
-      <button id="exportResultsBtn" class="secondary">💾 Export CSV</button>
+      <span>Top <input type="number" id="topNResults" value="20" min="1" class="input-small"> from results</span>
+      <button id="selectTopResultsBtn" class="success">🔘 Select on Page (Top N)</button>
+      <button id="exportResultsBtn" class="secondary">💾 Export to CSV</button>
     </div>
   </div>
 </div>
@@ -215,7 +242,7 @@
   <div id="apiUrlsList"></div>
   <div style="display: flex; gap: 8px; margin-top: 12px;">
     <input type="text" id="newApiUrl" placeholder="http://.../scrape" style="flex:1;">
-    <button id="addApiUrlBtn">➕ Add</button>
+    <button id="addApiUrlBtn">➕ Add Endpoint</button>
   </div>
   <div id="apiStatus" class="status"></div>
   <hr>
