@@ -1,18 +1,14 @@
-// popup.js
-
-let allPageNumbers = [];        // all numbers from page
-let selectedNumbersToSend = []; // currently checked numbers in popup list
-let apiResults = [];            // raw results from API
-let currentSortField = "total_calls";
-let currentSortAsc = true;
-let currentFilter = "all";
+// popup.js – orchestrates UI, API calls, selection
 
 // DOM elements
 const numbersContainer = document.getElementById("numbersContainer");
 const sendSelectedBtn = document.getElementById("sendSelectedBtn");
 const sendTopPageBtn = document.getElementById("sendTopPageBtn");
 const topNPageInput = document.getElementById("topNPage");
-const resultsSection = document.getElementById("resultsSection");
+const selectAllBtn = document.getElementById("selectAllBtn");
+const deselectAllBtn = document.getElementById("deselectAllBtn");
+const resultsPlaceholder = document.getElementById("resultsPlaceholder");
+const resultsContent = document.getElementById("resultsContent");
 const filterSelect = document.getElementById("filterSelect");
 const sortSelect = document.getElementById("sortSelect");
 const sortAscBtn = document.getElementById("sortAscBtn");
@@ -20,252 +16,326 @@ const sortDescBtn = document.getElementById("sortDescBtn");
 const topNResultsInput = document.getElementById("topNResults");
 const selectTopResultsBtn = document.getElementById("selectTopResultsBtn");
 const copyResultsBtn = document.getElementById("copyResultsBtn");
+const exportResultsBtn = document.getElementById("exportResultsBtn");
 const apiUrlsListDiv = document.getElementById("apiUrlsList");
 const newApiUrlInput = document.getElementById("newApiUrl");
 const addApiUrlBtn = document.getElementById("addApiUrlBtn");
 const apiStatus = document.getElementById("apiStatus");
+const clearStorageBtn = document.getElementById("clearStorageBtn");
+const progressOverlay = document.getElementById("progressOverlay");
 
-// Load page numbers on popup open
-async function loadPageNumbers() {
-  numbersContainer.innerHTML = "Loading numbers from page...";
-  try {
-    const response = await chrome.runtime.sendMessage({ action: "getNumbersFromPage" });
-    if (response && response.numbers) {
-      allPageNumbers = response.numbers;
-      renderNumberList();
-    } else {
-      numbersContainer.innerHTML = "No numbers found on page. " + (response?.error || "");
-    }
-  } catch (err) {
-    numbersContainer.innerHTML = "Error: " + err.message;
-  }
+// Data
+let capturedNumbers = [];
+let selectedNumbersToSend = [];
+let apiResults = [];
+let currentSortField = "total_calls";
+let currentSortAsc = true;
+let currentFilter = "all";
+
+// Tabs
+const tabs = document.querySelectorAll(".tab");
+const panels = {
+    numbers: document.getElementById("numbersPanel"),
+    results: document.getElementById("resultsPanel"),
+    settings: document.getElementById("settingsPanel")
+};
+tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+        const target = tab.dataset.tab;
+        tabs.forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        Object.values(panels).forEach(p => p.classList.remove("active-panel"));
+        panels[target].classList.add("active-panel");
+    });
+});
+
+function showProgress(show) {
+    progressOverlay.style.display = show ? "flex" : "none";
 }
 
-// Render list of numbers with checkboxes (all checked by default)
+// Load captured numbers from storage
+async function loadCapturedNumbers() {
+    numbersContainer.innerHTML = "Loading numbers...";
+    try {
+        const response = await chrome.runtime.sendMessage({ action: "getCapturedNumbers" });
+        capturedNumbers = response.numbers || [];
+        if (capturedNumbers.length) {
+            renderNumberList();
+        } else {
+            numbersContainer.innerHTML = '<div class="empty-state">📭 No numbers captured yet. Refresh the Peerless page.</div>';
+            selectedNumbersToSend = [];
+        }
+    } catch (err) {
+        numbersContainer.innerHTML = `<div class="empty-state">⚠️ Error: ${err.message}</div>`;
+    }
+}
+
 function renderNumberList() {
-  if (!allPageNumbers.length) {
-    numbersContainer.innerHTML = "No phone numbers found on page.";
-    return;
-  }
-  selectedNumbersToSend = [...allPageNumbers]; // default all selected
-  let html = "";
-  allPageNumbers.forEach(num => {
-    html += `<div class="number-item">
-      <input type="checkbox" class="num-checkbox" value="${num}" checked> <span>${num}</span>
-    </div>`;
-  });
-  numbersContainer.innerHTML = html;
-  // attach event listeners to update selectedNumbersToSend
-  document.querySelectorAll('.num-checkbox').forEach(cb => {
-    cb.addEventListener('change', updateSelectedNumbers);
-  });
+    selectedNumbersToSend = [...capturedNumbers];
+    let html = "";
+    capturedNumbers.forEach(num => {
+        html += `<div class="number-item">
+            <input type="checkbox" class="num-checkbox" value="${num}" checked> <span>${num}</span>
+        </div>`;
+    });
+    numbersContainer.innerHTML = html;
+    document.querySelectorAll('.num-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateSelectedNumbers);
+    });
 }
 
 function updateSelectedNumbers() {
-  const checkboxes = document.querySelectorAll('.num-checkbox');
-  selectedNumbersToSend = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+    const checkboxes = document.querySelectorAll('.num-checkbox');
+    selectedNumbersToSend = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
 }
 
-// API call via background
-async function callApi(numbers) {
-  apiStatus.innerText = "Calling API...";
-  resultsSection.style.display = "none";
-  try {
-    const response = await chrome.runtime.sendMessage({ action: "callApi", numbers: numbers });
-    if (response.success) {
-      apiResults = response.data;
-      // Ensure results are in same order as requested? Not necessary.
-      renderResultsTable();
-      resultsSection.style.display = "block";
-      apiStatus.innerText = "API call successful.";
-    } else {
-      apiStatus.innerText = "API error: " + response.error;
+// API call to reputation server
+async function callReputationApi(numbers) {
+    if (!numbers.length) {
+        apiStatus.innerText = "No numbers to send.";
+        return false;
     }
-  } catch (err) {
-    apiStatus.innerText = "API error: " + err.message;
-  }
+    showProgress(true);
+    apiStatus.innerText = "Calling reputation API...";
+    resultsPlaceholder.style.display = "block";
+    resultsContent.style.display = "none";
+    try {
+        const response = await chrome.runtime.sendMessage({ action: "callReputationApi", numbers: numbers });
+        if (response.success) {
+            apiResults = response.data;
+            await chrome.runtime.sendMessage({ action: "storeApiResults", results: apiResults });
+            renderResultsTable();
+            resultsPlaceholder.style.display = "none";
+            resultsContent.style.display = "block";
+            apiStatus.innerText = `✅ API returned ${apiResults.length} results.`;
+            return true;
+        } else {
+            apiStatus.innerText = `❌ API error: ${response.error}`;
+            resultsPlaceholder.innerHTML = `<div class="empty-state">❌ API error: ${response.error}</div>`;
+            resultsPlaceholder.style.display = "block";
+            return false;
+        }
+    } catch (err) {
+        apiStatus.innerText = `❌ Error: ${err.message}`;
+        resultsPlaceholder.innerHTML = `<div class="empty-state">❌ ${err.message}</div>`;
+        return false;
+    } finally {
+        showProgress(false);
+    }
 }
 
-// Render results table with sorting/filtering
 function renderResultsTable() {
-  let filtered = [...apiResults];
-  if (currentFilter !== "all") {
-    filtered = filtered.filter(r => r.reputation === currentFilter);
-  }
-  // Sort
-  filtered.sort((a,b) => {
-    let aVal = a[currentSortField];
-    let bVal = b[currentSortField];
-    if (currentSortField === "total_calls" || currentSortField === "user_reports") {
-      aVal = parseInt(aVal) || 0;
-      bVal = parseInt(bVal) || 0;
+    let filtered = [...apiResults];
+    if (currentFilter !== "all") {
+        filtered = filtered.filter(r => r.reputation === currentFilter);
     }
-    if (aVal < bVal) return currentSortAsc ? -1 : 1;
-    if (aVal > bVal) return currentSortAsc ? 1 : -1;
-    return 0;
-  });
-  const tbody = document.getElementById("resultsBody");
-  tbody.innerHTML = "";
-  filtered.forEach(res => {
-    const row = tbody.insertRow();
-    row.insertCell(0).innerText = res.phone_number;
-    row.insertCell(1).innerText = res.reputation;
-    row.insertCell(2).innerText = res.robokiller_status || "";
-    row.insertCell(3).innerText = res.total_calls || "0";
-    row.insertCell(4).innerText = res.user_reports || "0";
-    row.insertCell(5).innerText = res.last_call || "N/A";
-  });
+    filtered.sort((a,b) => {
+        let aVal = a[currentSortField];
+        let bVal = b[currentSortField];
+        if (currentSortField === "total_calls" || currentSortField === "user_reports") {
+            aVal = parseInt(aVal) || 0;
+            bVal = parseInt(bVal) || 0;
+        }
+        if (aVal < bVal) return currentSortAsc ? -1 : 1;
+        if (aVal > bVal) return currentSortAsc ? 1 : -1;
+        return 0;
+    });
+    const tbody = document.getElementById("resultsBody");
+    tbody.innerHTML = "";
+    filtered.forEach(res => {
+        const row = tbody.insertRow();
+        row.insertCell(0).innerText = res.phone_number;
+        row.insertCell(1).innerText = res.reputation;
+        row.insertCell(2).innerText = res.robokiller_status || "";
+        row.insertCell(3).innerText = res.total_calls || "0";
+        row.insertCell(4).innerText = res.user_reports || "0";
+        row.insertCell(5).innerText = res.last_call || "N/A";
+    });
 }
 
-// Get top N numbers from current filtered/sorted table view
 function getTopResultsNumbers(n) {
-  let filtered = [...apiResults];
-  if (currentFilter !== "all") {
-    filtered = filtered.filter(r => r.reputation === currentFilter);
-  }
-  filtered.sort((a,b) => {
-    let aVal = a[currentSortField];
-    let bVal = b[currentSortField];
-    if (currentSortField === "total_calls" || currentSortField === "user_reports") {
-      aVal = parseInt(aVal) || 0;
-      bVal = parseInt(bVal) || 0;
+    let filtered = [...apiResults];
+    if (currentFilter !== "all") {
+        filtered = filtered.filter(r => r.reputation === currentFilter);
     }
-    if (aVal < bVal) return currentSortAsc ? -1 : 1;
-    if (aVal > bVal) return currentSortAsc ? 1 : -1;
-    return 0;
-  });
-  const topNumbers = filtered.slice(0, n).map(r => r.phone_number);
-  return topNumbers;
+    filtered.sort((a,b) => {
+        let aVal = a[currentSortField];
+        let bVal = b[currentSortField];
+        if (currentSortField === "total_calls" || currentSortField === "user_reports") {
+            aVal = parseInt(aVal) || 0;
+            bVal = parseInt(bVal) || 0;
+        }
+        if (aVal < bVal) return currentSortAsc ? -1 : 1;
+        if (aVal > bVal) return currentSortAsc ? 1 : -1;
+        return 0;
+    });
+    return filtered.slice(0, n).map(r => r.phone_number);
 }
 
-// Send selection to page
 async function selectNumbersOnPage(numbers) {
-  apiStatus.innerText = "Selecting numbers on page...";
-  try {
-    const response = await chrome.runtime.sendMessage({ action: "selectNumbersOnPage", numbers: numbers });
-    if (response && response.success) {
-      apiStatus.innerText = `Selected ${response.selected} numbers on page.`;
-    } else {
-      apiStatus.innerText = "Selection error: " + (response?.error || "unknown");
+    if (!numbers.length) return;
+    showProgress(true);
+    apiStatus.innerText = `Selecting ${numbers.length} numbers on page...`;
+    try {
+        const response = await chrome.runtime.sendMessage({ action: "selectNumbersOnPage", numbers: numbers });
+        if (response && response.success) {
+            apiStatus.innerText = `✅ Selected ${response.selected} numbers on page.`;
+        } else {
+            apiStatus.innerText = `❌ Selection error: ${response?.error || "unknown"}`;
+        }
+    } catch (err) {
+        apiStatus.innerText = `❌ Selection error: ${err.message}`;
+    } finally {
+        showProgress(false);
     }
-  } catch (err) {
-    apiStatus.innerText = "Selection error: " + err.message;
-  }
 }
 
 // API URLs management
 async function loadApiUrls() {
-  const response = await chrome.runtime.sendMessage({ action: "getApiUrls" });
-  renderApiUrls(response.urls);
+    const response = await chrome.runtime.sendMessage({ action: "getApiUrls" });
+    renderApiUrls(response.urls);
 }
 
 function renderApiUrls(urls) {
-  apiUrlsListDiv.innerHTML = "";
-  urls.forEach((url, idx) => {
-    const div = document.createElement("div");
-    div.className = "api-url-item";
-    div.innerHTML = `
-      <input type="text" value="${url}" data-idx="${idx}" class="api-url-input">
-      <button class="remove-url" data-idx="${idx}">❌</button>
-    `;
-    apiUrlsListDiv.appendChild(div);
-  });
-  // attach remove handlers
-  document.querySelectorAll('.remove-url').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const idx = parseInt(btn.dataset.idx);
-      const newUrls = [...urls];
-      newUrls.splice(idx, 1);
-      await chrome.runtime.sendMessage({ action: "saveApiUrls", urls: newUrls });
-      renderApiUrls(newUrls);
+    apiUrlsListDiv.innerHTML = "";
+    if (!urls.length) {
+        apiUrlsListDiv.innerHTML = '<div class="empty-state">No endpoints configured. Add one below.</div>';
+        return;
+    }
+    urls.forEach((url, idx) => {
+        const div = document.createElement("div");
+        div.className = "api-url-item";
+        div.innerHTML = `
+            <input type="text" value="${url}" data-idx="${idx}" class="api-url-input">
+            <button class="remove-url" data-idx="${idx}" style="background:#dc3545; color:white; border:none; border-radius:4px; cursor:pointer;">❌</button>
+        `;
+        apiUrlsListDiv.appendChild(div);
     });
-  });
-  // attach change handlers for inline editing
-  document.querySelectorAll('.api-url-input').forEach(input => {
-    input.addEventListener('change', async (e) => {
-      const idx = parseInt(input.dataset.idx);
-      const newUrls = [...urls];
-      newUrls[idx] = input.value;
-      await chrome.runtime.sendMessage({ action: "saveApiUrls", urls: newUrls });
+    document.querySelectorAll('.remove-url').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const idx = parseInt(btn.dataset.idx);
+            const newUrls = [...urls];
+            newUrls.splice(idx, 1);
+            await chrome.runtime.sendMessage({ action: "saveApiUrls", urls: newUrls });
+            renderApiUrls(newUrls);
+        });
     });
-  });
+    document.querySelectorAll('.api-url-input').forEach(input => {
+        input.addEventListener('change', async (e) => {
+            const idx = parseInt(input.dataset.idx);
+            const newUrls = [...urls];
+            newUrls[idx] = input.value;
+            await chrome.runtime.sendMessage({ action: "saveApiUrls", urls: newUrls });
+        });
+    });
+}
+
+// Export results as CSV
+function exportResultsCSV() {
+    if (!apiResults.length) {
+        apiStatus.innerText = "No results to export.";
+        return;
+    }
+    const headers = ["phone_number","reputation","robokiller_status","total_calls","user_reports","last_call","scraped_at"];
+    const rows = apiResults.map(r => headers.map(h => r[h] || "").join(","));
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], {type: "text/csv"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `did_results_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    apiStatus.innerText = "CSV exported.";
 }
 
 // Event listeners
-sendSelectedBtn.addEventListener("click", () => {
-  if (selectedNumbersToSend.length === 0) {
-    apiStatus.innerText = "No numbers selected.";
-    return;
-  }
-  callApi(selectedNumbersToSend);
-});
-
+sendSelectedBtn.addEventListener("click", () => callReputationApi(selectedNumbersToSend));
 sendTopPageBtn.addEventListener("click", () => {
-  let n = parseInt(topNPageInput.value);
-  if (isNaN(n) || n <= 0) n = allPageNumbers.length;
-  const topNumbers = allPageNumbers.slice(0, n);
-  if (topNumbers.length === 0) {
-    apiStatus.innerText = "No numbers on page.";
-    return;
-  }
-  callApi(topNumbers);
+    let n = parseInt(topNPageInput.value);
+    if (isNaN(n) || n <= 0) n = capturedNumbers.length;
+    const topNumbers = capturedNumbers.slice(0, n);
+    callReputationApi(topNumbers);
 });
-
+selectAllBtn.addEventListener("click", () => {
+    document.querySelectorAll('.num-checkbox').forEach(cb => { cb.checked = true; });
+    updateSelectedNumbers();
+});
+deselectAllBtn.addEventListener("click", () => {
+    document.querySelectorAll('.num-checkbox').forEach(cb => { cb.checked = false; });
+    updateSelectedNumbers();
+});
 filterSelect.addEventListener("change", () => {
-  currentFilter = filterSelect.value;
-  renderResultsTable();
+    currentFilter = filterSelect.value;
+    renderResultsTable();
 });
-
 sortSelect.addEventListener("change", () => {
-  currentSortField = sortSelect.value;
-  renderResultsTable();
+    currentSortField = sortSelect.value;
+    renderResultsTable();
 });
 sortAscBtn.addEventListener("click", () => {
-  currentSortAsc = true;
-  renderResultsTable();
+    currentSortAsc = true;
+    renderResultsTable();
 });
 sortDescBtn.addEventListener("click", () => {
-  currentSortAsc = false;
-  renderResultsTable();
+    currentSortAsc = false;
+    renderResultsTable();
 });
-
 selectTopResultsBtn.addEventListener("click", () => {
-  if (!apiResults.length) {
-    apiStatus.innerText = "No API results to select from.";
-    return;
-  }
-  let n = parseInt(topNResultsInput.value);
-  if (isNaN(n) || n <= 0) n = apiResults.length;
-  const numbersToSelect = getTopResultsNumbers(n);
-  if (numbersToSelect.length === 0) return;
-  selectNumbersOnPage(numbersToSelect);
+    if (!apiResults.length) {
+        apiStatus.innerText = "No API results to select from.";
+        return;
+    }
+    let n = parseInt(topNResultsInput.value);
+    if (isNaN(n) || n <= 0) n = apiResults.length;
+    const numbers = getTopResultsNumbers(n);
+    selectNumbersOnPage(numbers);
 });
-
 copyResultsBtn.addEventListener("click", async () => {
-  const numbers = getTopResultsNumbers(999999); // all filtered/sorted
-  if (numbers.length === 0) return;
-  const text = numbers.join("\n");
-  try {
-    await navigator.clipboard.writeText(text);
-    apiStatus.innerText = `Copied ${numbers.length} DIDs to clipboard.`;
-  } catch (err) {
-    apiStatus.innerText = "Copy failed: " + err.message;
-  }
+    const numbers = getTopResultsNumbers(999999);
+    if (!numbers.length) return;
+    try {
+        await navigator.clipboard.writeText(numbers.join("\n"));
+        apiStatus.innerText = `✅ Copied ${numbers.length} DIDs to clipboard.`;
+    } catch (err) {
+        apiStatus.innerText = "❌ Copy failed: " + err.message;
+    }
 });
-
+exportResultsBtn.addEventListener("click", exportResultsCSV);
 addApiUrlBtn.addEventListener("click", async () => {
-  let newUrl = newApiUrlInput.value.trim();
-  if (!newUrl) return;
-  const response = await chrome.runtime.sendMessage({ action: "getApiUrls" });
-  const urls = response.urls;
-  if (!urls.includes(newUrl)) {
-    urls.push(newUrl);
-    await chrome.runtime.sendMessage({ action: "saveApiUrls", urls: urls });
-    renderApiUrls(urls);
-    newApiUrlInput.value = "";
-  }
+    let newUrl = newApiUrlInput.value.trim();
+    if (!newUrl) return;
+    const response = await chrome.runtime.sendMessage({ action: "getApiUrls" });
+    const urls = response.urls;
+    if (!urls.includes(newUrl)) {
+        urls.push(newUrl);
+        await chrome.runtime.sendMessage({ action: "saveApiUrls", urls: urls });
+        renderApiUrls(urls);
+        newApiUrlInput.value = "";
+        apiStatus.innerText = "✅ API endpoint added.";
+    } else {
+        apiStatus.innerText = "URL already exists.";
+    }
+});
+clearStorageBtn.addEventListener("click", async () => {
+    await chrome.runtime.sendMessage({ action: "clearStoredData" });
+    apiResults = [];
+    resultsPlaceholder.style.display = "block";
+    resultsContent.style.display = "none";
+    apiStatus.innerText = "Stored results cleared.";
+    // Also reload captured numbers
+    loadCapturedNumbers();
 });
 
-// Initialization
-loadPageNumbers();
+// Initial load
+loadCapturedNumbers();
 loadApiUrls();
+// Load previously stored API results if any
+chrome.runtime.sendMessage({ action: "getApiResults" }, (response) => {
+    if (response.results && response.results.length) {
+        apiResults = response.results;
+        renderResultsTable();
+        resultsPlaceholder.style.display = "none";
+        resultsContent.style.display = "block";
+    }
+});

@@ -5,61 +5,92 @@
   <style>
     * { box-sizing: border-box; }
     body {
-      width: 650px;
-      max-height: 700px;
+      width: 700px;
+      max-height: 650px;
       margin: 0;
-      padding: 12px;
+      padding: 0;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       background: #f5f5f5;
-      font-size: 13px;
     }
-    h3 { margin: 0 0 8px 0; font-size: 16px; }
-    .section {
+    /* Tabs */
+    .tabs {
+      display: flex;
       background: white;
-      border-radius: 8px;
+      border-bottom: 1px solid #ddd;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .tab {
+      flex: 1;
       padding: 10px;
-      margin-bottom: 12px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    .section-title {
+      text-align: center;
+      cursor: pointer;
+      background: #f0f2f5;
+      border: none;
       font-weight: bold;
-      margin-bottom: 8px;
-      border-left: 4px solid #007bff;
-      padding-left: 8px;
     }
-    .number-list {
-      max-height: 150px;
+    .tab.active {
+      background: white;
+      border-bottom: 3px solid #007bff;
+      color: #007bff;
+    }
+    /* Panels */
+    .panel {
+      display: none;
+      padding: 15px;
+      background: white;
       overflow-y: auto;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 5px;
-      background: #fafafa;
+      max-height: 580px;
+    }
+    .panel.active-panel { display: block; }
+    /* Sticky action bar */
+    .sticky-bar {
+      position: sticky;
+      bottom: 0;
+      background: white;
+      padding: 10px 0 5px;
+      border-top: 1px solid #eee;
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      z-index: 5;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-weight: 600;
       font-size: 12px;
+    }
+    button:hover { background: #0056b3; }
+    button.secondary { background: #6c757d; }
+    button.success { background: #28a745; }
+    .number-list {
+      max-height: 280px;
+      overflow-y: auto;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 8px;
+      background: #fafafa;
     }
     .number-item {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 2px 0;
+      padding: 4px 0;
     }
-    button {
-      background-color: #007bff;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      padding: 6px 12px;
-      cursor: pointer;
-      font-weight: bold;
-      margin-right: 8px;
-      margin-top: 8px;
+    .results-container {
+      max-height: 280px;
+      overflow-y: auto;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      margin-bottom: 8px;
     }
-    button:hover { background-color: #0056b3; }
-    button.secondary { background-color: #6c757d; }
-    button.secondary:hover { background-color: #5a6268; }
-    button.success { background-color: #28a745; }
-    button.success:hover { background-color: #218838; }
-    .input-small { width: 60px; padding: 4px; margin: 0 4px; }
-    .filter-row { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -71,43 +102,79 @@
       text-align: left;
     }
     th {
-      background-color: #f0f0f0;
+      background: #f0f0f0;
       cursor: pointer;
-      user-select: none;
+      position: sticky;
+      top: 0;
     }
-    th:hover { background-color: #e0e0e0; }
-    .results-container {
-      max-height: 250px;
-      overflow-y: auto;
+    .filter-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
     }
-    .status { font-size: 12px; color: #666; margin-top: 5px; }
-    .error { color: red; }
-    .success { color: green; }
-    .settings {
-      font-size: 12px;
-      border-top: 1px solid #ddd;
-      margin-top: 8px;
-      padding-top: 8px;
+    select, input {
+      padding: 4px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
     }
-    .api-url-item { display: flex; gap: 5px; margin-bottom: 4px; align-items: center; }
+    .input-small { width: 70px; }
+    .progress-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .spinner {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+    }
+    .spinner::after {
+      content: "⏳";
+      display: inline-block;
+      animation: spin 1s linear infinite;
+      font-size: 30px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .empty-state { text-align: center; padding: 30px; color: #6c757d; }
+    .api-url-item { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
     .api-url-item input { flex: 1; }
-    .remove-url { background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; padding: 2px 6px; }
+    .status { font-size: 12px; margin-top: 8px; color: #666; }
   </style>
 </head>
 <body>
-  <h3>📞 DID Reputation Selector</h3>
-  <div class="section">
-    <div class="section-title">📋 Numbers on Page</div>
-    <div id="numbersContainer" class="number-list">Loading...</div>
-    <div>
-      <button id="sendSelectedBtn" class="success">Send Selected</button>
-      <span>Top <input type="number" id="topNPage" value="70" min="1" class="input-small"> from page</span>
-      <button id="sendTopPageBtn">Send Top N</button>
-    </div>
-  </div>
+<div class="tabs">
+  <button class="tab active" data-tab="numbers">📞 Numbers</button>
+  <button class="tab" data-tab="results">📊 Results</button>
+  <button class="tab" data-tab="settings">⚙️ Settings</button>
+</div>
 
-  <div class="section" id="resultsSection" style="display:none;">
-    <div class="section-title">📊 API Results</div>
+<!-- Numbers Panel -->
+<div id="numbersPanel" class="panel active-panel">
+  <div class="number-list" id="numbersContainer">Loading numbers...</div>
+  <div class="sticky-bar">
+    <button id="selectAllBtn" class="secondary">✅ Select All</button>
+    <button id="deselectAllBtn" class="secondary">❌ Deselect All</button>
+    <button id="sendSelectedBtn" class="success">📤 Send Selected</button>
+    <div style="flex:1"></div>
+    <span>Top <input type="number" id="topNPage" value="70" min="1" class="input-small"> from page</span>
+    <button id="sendTopPageBtn">📡 Send Top N</button>
+  </div>
+</div>
+
+<!-- Results Panel -->
+<div id="resultsPanel" class="panel">
+  <div id="resultsPlaceholder" class="empty-state">📭 No results yet.<br>Send numbers from the Numbers tab.</div>
+  <div id="resultsContent" style="display:none;">
     <div class="filter-row">
       <span>Filter:</span>
       <select id="filterSelect">
@@ -126,32 +193,37 @@
       </select>
       <button id="sortAscBtn">▲ Asc</button>
       <button id="sortDescBtn">▼ Desc</button>
+      <button id="copyResultsBtn" class="secondary">📋 Copy DIDs</button>
     </div>
     <div class="results-container">
       <table id="resultsTable">
-        <thead>
-          <tr><th data-field="phone_number">DID</th><th data-field="reputation">Reputation</th><th data-field="robokiller_status">Robokiller</th><th data-field="total_calls">Total Calls</th><th data-field="user_reports">Reports</th><th data-field="last_call">Last Call</th></tr>
-        </thead>
+        <thead><tr><th data-field="phone_number">DID</th><th data-field="reputation">Reputation</th><th data-field="robokiller_status">Robokiller</th><th data-field="total_calls">Total Calls</th><th data-field="user_reports">Reports</th><th data-field="last_call">Last Call</th></tr></thead>
         <tbody id="resultsBody"></tbody>
       </table>
     </div>
-    <div>
+    <div class="sticky-bar">
       <span>Select top <input type="number" id="topNResults" value="20" min="1" class="input-small"> from results</span>
-      <button id="selectTopResultsBtn">✅ Select on Page</button>
-      <button id="copyResultsBtn">📋 Copy DIDs</button>
+      <button id="selectTopResultsBtn" class="success">✅ Select on Page</button>
+      <button id="exportResultsBtn" class="secondary">💾 Export CSV</button>
     </div>
   </div>
+</div>
 
-  <div class="settings">
-    <div class="section-title">⚙️ API Endpoints (fallback order)</div>
-    <div id="apiUrlsList"></div>
-    <div style="display: flex; gap: 5px; margin-top: 5px;">
-      <input type="text" id="newApiUrl" placeholder="http://.../scrape" style="flex:1;">
-      <button id="addApiUrlBtn">Add</button>
-    </div>
-    <div id="apiStatus" class="status"></div>
+<!-- Settings Panel -->
+<div id="settingsPanel" class="panel">
+  <div>🌐 API Endpoints (fallback order)</div>
+  <div id="apiUrlsList"></div>
+  <div style="display: flex; gap: 8px; margin-top: 12px;">
+    <input type="text" id="newApiUrl" placeholder="http://.../scrape" style="flex:1;">
+    <button id="addApiUrlBtn">➕ Add</button>
   </div>
+  <div id="apiStatus" class="status"></div>
+  <hr>
+  <button id="clearStorageBtn" class="secondary">🗑️ Clear Stored Results</button>
+  <div class="status" style="margin-top: 8px;">Version 2.0</div>
+</div>
 
-  <script src="popup.js"></script>
+<div id="progressOverlay" class="progress-overlay"><div class="spinner"></div></div>
+<script src="popup.js"></script>
 </body>
 </html>
