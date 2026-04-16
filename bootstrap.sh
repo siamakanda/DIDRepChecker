@@ -1,33 +1,35 @@
 #!/bin/bash
-# Minimal bootstrap script to clone and run the full deployment
+# One‑command installer for DID Reputation API
 # Usage: curl -sL https://raw.githubusercontent.com/siamakanda/DIDRepChecker/main/bootstrap.sh | sudo bash
 
 set -e
 
 REPO_URL="https://github.com/siamakanda/DIDRepChecker.git"
-REPO_DIR="DIDRepChecker"
-BRANCH="main"  # change if your default branch is 'master'
+REPO_DIR="/opt/did-reputation-api"
+BRANCH="main"
 
-# Install git if not present
+# Ensure curl is available (though we are already using curl to fetch this script)
+if ! command -v curl &> /dev/null; then
+    apt update && apt install -y curl
+fi
+
+# Install git if missing
 if ! command -v git &> /dev/null; then
-    echo "Git not found. Installing..."
-    sudo apt update && sudo apt install -y git
+    apt update && apt install -y git
 fi
 
 # Clone or update the repository
 if [ -d "$REPO_DIR" ]; then
     echo "Repository already exists. Pulling latest changes..."
     cd "$REPO_DIR"
-    sudo git pull origin "$BRANCH"
+    git pull origin "$BRANCH"
 else
-    echo "Cloning repository..."
-    sudo git clone --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
+    echo "Cloning repository into $REPO_DIR..."
+    git clone --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
     cd "$REPO_DIR"
 fi
 
-# IMPORTANT: Enter the server directory where the deployment script lives
+# Enter the server directory and run the deployment script
 cd server
-
-# Make the deployment script executable and run it
 chmod +x deploy_lan.sh
-sudo ./deploy_lan.sh
+./deploy_lan.sh
