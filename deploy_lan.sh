@@ -1,13 +1,12 @@
 #!/bin/bash
 # Production Deployment Script for DID Reputation API (Local LAN)
-# Run as: sudo bash deploy.sh
+# This script must be run from the 'server' directory of the cloned repository.
 
 set -e
 
 # --- Configuration (EDIT THESE) ---
-REPO_URL="https://github.com/siamakanda/DIDRepChecker.git"
-REPO_BRANCH="main"                # change if your default branch is 'master'
-APP_DIR="/opt/did-reputation-api"
+# The script assumes it is run from the 'server' directory
+APP_DIR="$(pwd)"                     # e.g., /home/ubuntu/DIDRepChecker/server
 VENV_DIR="$APP_DIR/venv"
 SERVICE_NAME="did-api"
 # No domain, no SSL – we'll use the server's IP
@@ -24,21 +23,7 @@ sudo apt update && sudo apt upgrade -y
 log "Installing required system packages..."
 sudo apt install -y python3 python3-pip python3-venv git nginx curl
 
-# --- 2. Clone / Update Application ---
-if [ -d "$APP_DIR" ]; then
-    log "Application directory exists. Pulling latest changes..."
-    cd "$APP_DIR"
-    sudo git pull origin "$REPO_BRANCH"
-else
-    log "Cloning repository into $APP_DIR..."
-    sudo git clone --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR"
-    cd "$APP_DIR"
-fi
-
-# Ensure correct ownership (optional, but clean)
-sudo chown -R $USER:$USER "$APP_DIR"
-
-# --- 3. Python Virtual Environment & Dependencies ---
+# --- 2. Virtual Environment & Dependencies (no re‑cloning) ---
 if [ ! -d "$VENV_DIR" ]; then
     log "Creating virtual environment..."
     python3 -m venv "$VENV_DIR"
@@ -48,10 +33,10 @@ log "Activating virtual environment and installing dependencies..."
 source "$VENV_DIR/bin/activate"
 pip install --upgrade pip
 
-if [ -f "$APP_DIR/requirements.txt" ]; then
-    pip install -r "$APP_DIR/requirements.txt"
+if [ -f "../requirements.txt" ]; then
+    pip install -r "../requirements.txt"
 else
-    log "⚠️ requirements.txt not found. Skipping."
+    log "⚠️ requirements.txt not found in the parent directory. Skipping."
 fi
 
 # Install Gunicorn (production WSGI server)
@@ -59,7 +44,7 @@ pip install gunicorn
 
 deactivate
 
-# --- 4. Create systemd Service for Gunicorn ---
+# --- 3. Create systemd Service for Gunicorn ---
 log "Creating systemd service file: /etc/systemd/system/$SERVICE_NAME.service"
 sudo tee /etc/systemd/system/$SERVICE_NAME.service > /dev/null <<EOF
 [Unit]
@@ -77,7 +62,7 @@ ExecStart=$VENV_DIR/bin/gunicorn --workers 4 --bind unix:$APP_DIR/$SERVICE_NAME.
 WantedBy=multi-user.target
 EOF
 
-# --- 5. Configure Nginx Reverse Proxy (LAN, no SSL) ---
+# --- 4. Configure Nginx Reverse Proxy (LAN, no SSL) ---
 log "Configuring Nginx..."
 
 # Get the server's local IP (first non-loopback)
@@ -103,20 +88,19 @@ EOF
 
 # Enable site
 sudo ln -sf /etc/nginx/sites-available/$SERVICE_NAME /etc/nginx/sites-enabled/
-# Optional: remove default site to avoid conflict
-sudo rm -f /etc/nginx/sites-enabled/default
+sudo rm -f /etc/nginx/sites-enabled/default   # optional: remove default site
 
 # Test Nginx configuration
 sudo nginx -t
 
-# --- 6. Start Services ---
+# --- 5. Start Services ---
 log "Reloading systemd, starting Gunicorn and Nginx..."
 sudo systemctl daemon-reload
 sudo systemctl enable $SERVICE_NAME
 sudo systemctl restart $SERVICE_NAME
 sudo systemctl restart nginx
 
-# --- 7. Health Check ---
+# --- 6. Health Check ---
 log "Waiting 3 seconds for services to start..."
 sleep 3
 

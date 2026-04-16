@@ -25,6 +25,9 @@ else
     cd "$REPO_DIR"
 fi
 
+# Enter the server directory (where the actual Flask app lives)
+cd server
+
 # Make the deployment script executable and run it
 chmod +x deploy_lan.sh
 sudo ./deploy_lan.sh
