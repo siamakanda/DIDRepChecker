@@ -1,54 +1,69 @@
 """
-DID Reputation Checker - Production API Server with CORS
-Supports Waitress (Windows) and Gunicorn (Linux/macOS)
+FastAPI server for DID Reputation Checker
+Provides a /scrape endpoint that returns reputation data for a list of phone numbers.
 """
 
-import os
-import asyncio
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from typing import List, Dict
 from scraper_engine import RoboKillerScraper
 
-app = Flask(__name__)
+# ----------------------------------------------------------------------
+# FastAPI app setup
+# ----------------------------------------------------------------------
+app = FastAPI(
+    title="DID Reputation API",
+    description="Returns reputation, total calls, user reports, and last call for phone numbers.",
+    version="2.0.0"
+)
 
-# Allow CORS for Chrome extension origin and localhost
-CORS(app, 
-     origins=["chrome-extension://*", "http://localhost:*", "http://127.0.0.1:*"],
-     supports_credentials=True,
-     allow_headers=["Content-Type"])
+# Enable CORS for Chrome extension and local development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, restrict to your extension's origin
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+# ----------------------------------------------------------------------
+# Pydantic models
+# ----------------------------------------------------------------------
+class NumbersRequest(BaseModel):
+    numbers: List[str] = Field(..., min_length=1, description="List of phone numbers")
+
+class NumberResult(BaseModel):
+    phone_number: str
+    reputation: str
+    robokiller_status: str
+    user_reports: str
+    total_calls: str
+    last_call: str
+    scraped_at: str
+
+# ----------------------------------------------------------------------
+# Scraper instance (reused across requests)
+# ----------------------------------------------------------------------
 scraper = RoboKillerScraper()
 
-@app.route('/scrape', methods=['POST'])
-def scrape():
-    """Scrape reputation for a list of phone numbers."""
-    data = request.get_json()
-    if not data or 'numbers' not in data:
-        return jsonify({'error': 'Missing "numbers" field'}), 400
-    numbers = data['numbers']
-    if not isinstance(numbers, list):
-        return jsonify({'error': 'Numbers must be a list'}), 400
-    
-    # Run async scraper within the request
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+# ----------------------------------------------------------------------
+# Endpoints
+# ----------------------------------------------------------------------
+@app.post("/scrape", response_model=List[NumberResult])
+async def scrape_numbers(request: NumbersRequest):
+    """
+    Accept a list of phone numbers and return reputation data.
+    """
     try:
-        results = loop.run_until_complete(scraper.scrape_async(numbers))
-    finally:
-        loop.close()
-    
-    return jsonify(results)
+        results = await scraper.scrape_async(request.numbers)
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.route('/health', methods=['GET'])
-def health():
-    """Health check endpoint for load balancers."""
-    return jsonify({'status': 'healthy'})
-
-if __name__ == '__main__':
-    # Use Waitress for production (recommended for Windows)
-    from waitress import serve
-    host = os.environ.get('API_HOST', '0.0.0.0')
-    port = int(os.environ.get('API_PORT', 5000))
-    threads = int(os.environ.get('API_THREADS', 4))
-    print(f"Starting Waitress server on {host}:{port} with {threads} threads")
-    serve(app, host=host, port=port, threads=threads)
+@app.get("/health", response_model=Dict[str, str])
+async def health_check():
+    """
+    Simple health check endpoint.
+    """
+    return {"status": "healthy"}

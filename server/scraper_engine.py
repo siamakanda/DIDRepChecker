@@ -12,6 +12,7 @@ import logging
 from typing import List, Dict, Optional, Callable, Any
 from datetime import datetime
 from lxml import html
+from cache import ReputationCache
 
 # ----------------------------------------------------------------------
 # Configuration defaults
@@ -223,6 +224,7 @@ class RoboKillerScraper:
         self.config = DEFAULT_CONFIG.copy()
         if config:
             self.config.update(config)
+        self.cache = ReputationCache()
 
     async def _fetch_one(self, session: aiohttp.ClientSession,
                          phone_number: str,
@@ -293,6 +295,22 @@ class RoboKillerScraper:
         """Asynchronous scrape – ideal for API endpoints."""
         if not phone_numbers:
             return []
+
+        # 1. Check Cache
+        cached_results, numbers_to_scrape = await self.cache.get_uncached(phone_numbers)
+        
+        # 2. Trigger progress callback for cached items
+        if progress_callback:
+            for num, res in cached_results.items():
+                if asyncio.iscoroutinefunction(progress_callback):
+                    await progress_callback(num, res)
+                else:
+                    progress_callback(num, res)
+
+        # 3. If everything was cached, return early
+        if not numbers_to_scrape:
+            return list(cached_results.values())
+
         connector = aiohttp.TCPConnector(
             limit=self.config["connection_limit"],
             keepalive_timeout=self.config["keepalive_timeout"],
@@ -303,10 +321,16 @@ class RoboKillerScraper:
         async with aiohttp.ClientSession(connector=connector) as session:
             tasks = [
                 self._fetch_one(session, num, semaphore, rate_limiter, progress_callback)
-                for num in phone_numbers
+                for num in numbers_to_scrape
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            return [r for r in results if not isinstance(r, Exception)]
+            valid_new_results = [r for r in results if not isinstance(r, Exception)]
+            
+            # 4. Save new results to cache
+            await self.cache.save(valid_new_results)
+            
+            # 5. Return combined list
+            return list(cached_results.values()) + valid_new_results
 
     def scrape(self,
                phone_numbers: List[str],

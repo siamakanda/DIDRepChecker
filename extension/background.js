@@ -21,8 +21,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ urls: apiUrls });
         return true;
     }
-    else if (request.action === "callReputationApi") {
-        callApiWithFallback(request.numbers, sendResponse);
+    else if (request.action === "startReputationCheck") {
+        chrome.storage.local.set({ 
+            apiResults: [],
+            apiState: { status: "running", progress: 0, total: request.numbers.length, error: null } 
+        });
+        callApiInChunks(request.numbers);
+        sendResponse({ success: true });
         return true;
     }
     else if (request.action === "storeCapturedNumbers") {
@@ -71,27 +76,60 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-async function callApiWithFallback(numbers, sendResponse) {
-    let lastError = null;
-    for (let url of apiUrls) {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000);
-            const response = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ numbers: numbers }),
-                signal: controller.signal
+async function callApiInChunks(numbers) {
+    const CHUNK_SIZE = 100;
+    let accumulatedResults = [];
+    
+    for (let i = 0; i < numbers.length; i += CHUNK_SIZE) {
+        const chunk = numbers.slice(i, i + CHUNK_SIZE);
+        let chunkSuccess = false;
+        let lastError = null;
+        
+        for (let url of apiUrls) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 120000);
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ numbers: chunk }),
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const data = await response.json();
+                accumulatedResults = accumulatedResults.concat(data);
+                
+                // Save accumulated results incrementally
+                await chrome.storage.local.set({
+                    apiResults: accumulatedResults,
+                    apiState: { 
+                        status: "running", 
+                        progress: Math.min(i + CHUNK_SIZE, numbers.length), 
+                        total: numbers.length, 
+                        error: null 
+                    }
+                });
+                
+                chunkSuccess = true;
+                break;
+            } catch (err) {
+                lastError = err;
+                console.warn(`Chunk API call to ${url} failed: ${err.message}`);
+            }
+        }
+        
+        if (!chunkSuccess) {
+            await chrome.storage.local.set({
+                apiState: { status: "error", error: lastError?.message || "All endpoints failed on a chunk" }
             });
-            clearTimeout(timeoutId);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
-            sendResponse({ success: true, data: data });
             return;
-        } catch (err) {
-            lastError = err;
-            console.warn(`API call to ${url} failed: ${err.message}`);
         }
     }
-    sendResponse({ success: false, error: lastError?.message || "All endpoints failed" });
+
+    // Mark as completed when done
+    await chrome.storage.local.set({
+        apiState: { status: "completed", progress: numbers.length, total: numbers.length, error: null }
+    });
 }

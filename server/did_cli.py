@@ -50,7 +50,7 @@ class DIDScraperCLI:
 
     def _show_banner(self):
         console.print("\n[bold cyan]DID Reputation Checker[/bold cyan] [dim]v{}[/dim]".format(VERSION))
-        console.print("[dim]High‑speed phone number reputation lookup via RoboKiller[/dim]")
+        console.print("[dim]High-speed phone number reputation lookup via RoboKiller[/dim]")
         console.print()
 
     # ---------- Input Parsing ----------

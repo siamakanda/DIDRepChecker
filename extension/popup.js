@@ -26,6 +26,12 @@ const clearStorageBtn = document.getElementById("clearStorageBtn");
 const progressOverlay = document.getElementById("progressOverlay");
 const selectAllRowsCheckbox = document.getElementById("selectAllRows");
 
+function setApiStatusText(text) {
+    apiStatus.innerText = text;
+    const pt = document.getElementById("progressText");
+    if (pt) pt.innerText = text;
+}
+
 // Data
 let capturedNumbers = [];
 let selectedNumbersToSend = [];
@@ -165,29 +171,12 @@ async function callReputationApi(numbers, description = "numbers") {
     resultsPlaceholder.style.display = "block";
     resultsContent.style.display = "none";
     try {
-        const response = await chrome.runtime.sendMessage({ action: "callReputationApi", numbers: numbers });
-        if (response.success) {
-            apiResults = response.data;
-            await chrome.runtime.sendMessage({ action: "storeApiResults", results: apiResults });
-            updateFilterDropdown();
-            renderResultsTable();
-            resultsPlaceholder.style.display = "none";
-            resultsContent.style.display = "block";
-            apiStatus.innerText = `✅ Received ${apiResults.length} reputation results.`;
-            updateStats();
-            return true;
-        } else {
-            apiStatus.innerText = `❌ API error: ${response.error}`;
-            resultsPlaceholder.innerHTML = `<div class="empty-state">❌ API error: ${response.error}</div>`;
-            resultsPlaceholder.style.display = "block";
-            return false;
-        }
+        await chrome.runtime.sendMessage({ action: "startReputationCheck", numbers: numbers });
     } catch (err) {
         apiStatus.innerText = `❌ Error: ${err.message}`;
         resultsPlaceholder.innerHTML = `<div class="empty-state">❌ ${err.message}</div>`;
-        return false;
-    } finally {
         showProgress(false);
+        return false;
     }
 }
 
@@ -476,9 +465,55 @@ clearStorageBtn.addEventListener("click", async () => {
     loadCapturedNumbers();
 });
 
-// Load stored selected count and preferences
-chrome.storage.local.get(['lastSelectedCount'], (res) => {
+// Storage listener for state and results
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'local') {
+        if (changes.apiState) {
+            const state = changes.apiState.newValue;
+            if (state) {
+                if (state.status === "running") {
+                    showProgress(true);
+                    if (state.total) {
+                        setApiStatusText(`Checking reputation... (${state.progress} / ${state.total})`);
+                    } else {
+                        setApiStatusText("Checking reputation (continued in background)...");
+                    }
+                } else if (state.status === "completed") {
+                    showProgress(false);
+                    setApiStatusText(`✅ Received reputation results.`);
+                } else if (state.status === "error") {
+                    showProgress(false);
+                    setApiStatusText(`❌ API error: ${state.error}`);
+                    resultsPlaceholder.innerHTML = `<div class="empty-state">❌ API error: ${state.error}</div>`;
+                    resultsPlaceholder.style.display = "block";
+                    resultsContent.style.display = "none";
+                }
+            }
+        }
+        if (changes.apiResults) {
+            apiResults = changes.apiResults.newValue || [];
+            if (apiResults.length > 0) {
+                updateFilterDropdown();
+                renderResultsTable();
+                resultsPlaceholder.style.display = "none";
+                resultsContent.style.display = "block";
+                updateStats();
+            }
+        }
+    }
+});
+
+// Load stored selected count and apiState
+chrome.storage.local.get(['lastSelectedCount', 'apiState'], (res) => {
     lastSelectedCount = res.lastSelectedCount || 0;
+    if (res.apiState && res.apiState.status === "running") {
+        showProgress(true);
+        if (res.apiState.total) {
+            setApiStatusText(`Checking reputation... (${res.apiState.progress} / ${res.apiState.total})`);
+        } else {
+            setApiStatusText("Checking reputation (continued in background)...");
+        }
+    }
     updateStats();
 });
 
