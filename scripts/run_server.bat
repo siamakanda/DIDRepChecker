@@ -5,6 +5,9 @@ echo DID Reputation API Server (FastAPI)
 echo =======================================
 echo.
 
+REM Change directory to server so venv and uvicorn run in the correct folder
+cd /d "%~dp0..\server"
+
 REM Check if Python is installed
 python --version >nul 2>&1
 if errorlevel 1 (

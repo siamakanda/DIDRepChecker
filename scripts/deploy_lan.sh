@@ -49,9 +49,9 @@ After=network.target
 [Service]
 User=www-data
 Group=www-data
-WorkingDirectory=$APP_DIR/app
+WorkingDirectory=$APP_DIR
 Environment="PATH=$VENV_DIR/bin"
-ExecStart=$VENV_DIR/bin/gunicorn -k uvicorn.workers.UvicornWorker --workers 4 --bind unix:$SOCKET_PATH main:app
+ExecStart=$VENV_DIR/bin/gunicorn -k uvicorn.workers.UvicornWorker --workers 4 --bind unix:$SOCKET_PATH api_server:app
 
 [Install]
 WantedBy=multi-user.target
