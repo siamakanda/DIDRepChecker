@@ -5,8 +5,8 @@ echo DID Reputation API Server (FastAPI)
 echo =======================================
 echo.
 
-REM Change directory to server so venv and uvicorn run in the correct folder
-cd /d "%~dp0..\server"
+REM Change directory to project root so venv is created globally
+cd /d "%~dp0.."
 
 REM Check if Python is installed
 python --version >nul 2>&1
@@ -38,13 +38,11 @@ if errorlevel 1 (
 
 REM Install dependencies (skip pip upgrade)
 echo Installing/upgrading dependencies...
-if exist "..\requirements.txt" (
-    pip install -r ..\requirements.txt
-) else if exist "requirements.txt" (
+if exist "requirements.txt" (
     pip install -r requirements.txt
 ) else (
     echo requirements.txt not found. Installing core packages only.
-    pip install fastapi uvicorn aiohttp lxml
+    pip install fastapi uvicorn aiohttp lxml aiosqlite
 )
 
 echo.
@@ -54,6 +52,6 @@ echo Press Ctrl+C to stop the server.
 echo.
 
 REM Run Uvicorn (reload enabled for development)
-uvicorn api_server:app --host 0.0.0.0 --port 8000 --reload
+uvicorn server.api_server:app --host 0.0.0.0 --port 8000 --reload
 
 pause

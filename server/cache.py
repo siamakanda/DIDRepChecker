@@ -7,8 +7,11 @@ import aiosqlite
 class ReputationCache:
     """Async SQLite cache for RoboKiller reputation results."""
 
-    def __init__(self, db_path: str = "reputation_cache.db", ttl_seconds: int = 86400):
-        self.db_path = db_path
+    def __init__(self, db_path: str = None, ttl_seconds: int = 86400):
+        if db_path is None:
+            self.db_path = os.path.join(os.path.dirname(__file__), "reputation_cache.db")
+        else:
+            self.db_path = db_path
         self.ttl_seconds = ttl_seconds
         self._initialized = False
 

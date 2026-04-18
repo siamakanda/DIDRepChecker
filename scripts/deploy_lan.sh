@@ -6,7 +6,7 @@ set -e
 
 # Find the project root (parent of scripts directory)
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP_DIR="$PROJECT_ROOT/server"
+APP_DIR="$PROJECT_ROOT"
 VENV_DIR="$APP_DIR/venv"
 SERVICE_NAME="did-api"
 SOCKET_PATH="$APP_DIR/$SERVICE_NAME.sock"
@@ -31,10 +31,10 @@ fi
 log "Installing Python dependencies..."
 source "$VENV_DIR/bin/activate"
 pip install --upgrade pip
-if [ -f "$APP_DIR/requirements.txt" ]; then
-    pip install -r "$APP_DIR/requirements.txt"
+if [ -f "$PROJECT_ROOT/requirements.txt" ]; then
+    pip install -r "$PROJECT_ROOT/requirements.txt"
 else
-    log "⚠️ requirements.txt not found in $APP_DIR. Skipping."
+    log "⚠️ requirements.txt not found in $PROJECT_ROOT. Skipping."
 fi
 pip install gunicorn uvicorn
 deactivate
@@ -51,7 +51,7 @@ User=www-data
 Group=www-data
 WorkingDirectory=$APP_DIR
 Environment="PATH=$VENV_DIR/bin"
-ExecStart=$VENV_DIR/bin/gunicorn -k uvicorn.workers.UvicornWorker --workers 4 --bind unix:$SOCKET_PATH api_server:app
+ExecStart=$VENV_DIR/bin/gunicorn -k uvicorn.workers.UvicornWorker --workers 4 --bind unix:$SOCKET_PATH server.api_server:app
 
 [Install]
 WantedBy=multi-user.target

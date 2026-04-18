@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Dict
-from scraper_engine import RoboKillerScraper
+from server.scraper_engine import RoboKillerScraper
 
 # ----------------------------------------------------------------------
 # FastAPI app setup

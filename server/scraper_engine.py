@@ -12,7 +12,7 @@ import logging
 from typing import List, Dict, Optional, Callable, Any
 from datetime import datetime
 from lxml import html
-from cache import ReputationCache
+from server.cache import ReputationCache
 
 # ----------------------------------------------------------------------
 # Configuration defaults

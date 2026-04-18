@@ -177,7 +177,7 @@ def main():
     parser = argparse.ArgumentParser(description="Client for DID Reputation API")
     parser.add_argument("-n", "--numbers", help="Phone numbers (comma/space separated)")
     parser.add_argument("-f", "--file", help="Input file (CSV or text)")
-    parser.add_argument("-u", "--url", default="http://localhost:5000/scrape", help="API endpoint URL")
+    parser.add_argument("-u", "--url", default="http://localhost:8000/scrape", help="API endpoint URL")
     parser.add_argument("--json", action="store_true", help="Output raw JSON instead of formatted table")
     args = parser.parse_args()
 
