@@ -517,6 +517,27 @@ chrome.storage.local.get(['lastSelectedCount', 'apiState'], (res) => {
     updateStats();
 });
 
+// Dark Mode Logic
+const darkModeToggle = document.getElementById("darkModeToggle");
+chrome.storage.local.get(['darkMode'], (res) => {
+    if (res.darkMode) {
+        document.body.classList.add('dark-theme');
+        if (darkModeToggle) darkModeToggle.checked = true;
+    }
+});
+
+if (darkModeToggle) {
+    darkModeToggle.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            document.body.classList.add('dark-theme');
+            chrome.storage.local.set({ darkMode: true });
+        } else {
+            document.body.classList.remove('dark-theme');
+            chrome.storage.local.set({ darkMode: false });
+        }
+    });
+}
+
 // Initial loads
 loadPreferences();
 loadCapturedNumbers();
@@ -539,3 +560,25 @@ clearResultsBtn.className = "secondary";
 clearResultsBtn.style.marginLeft = "auto";
 clearResultsBtn.addEventListener("click", clearApiResults);
 document.querySelector("#resultsPanel .sticky-bar").appendChild(clearResultsBtn);
+
+// Retry Errors Button Logic
+const retryErrorsBtn = document.getElementById("retryErrorsBtn");
+if (retryErrorsBtn) {
+    retryErrorsBtn.addEventListener("click", () => {
+        if (!apiResults || apiResults.length === 0) return;
+        
+        const errorKeywords = ['Error', 'Timeout', 'Blocked', 'HTTP', 'Parse Error'];
+        const failedNumbers = apiResults
+            .filter(r => errorKeywords.some(err => r.reputation && r.reputation.includes(err)))
+            .map(r => r.phone_number);
+            
+        if (failedNumbers.length === 0) {
+            setApiStatusText("No failed numbers found to retry.");
+            return;
+        }
+        
+        setApiStatusText(`Retrying ${failedNumbers.length} failed numbers...`);
+        showProgress(true);
+        chrome.runtime.sendMessage({ action: "startReputationCheck", numbers: failedNumbers, append: true });
+    });
+}

@@ -22,11 +22,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
     else if (request.action === "startReputationCheck") {
+        const isAppend = request.append || false;
+        if (!isAppend) {
+            chrome.storage.local.set({ apiResults: [] });
+        }
         chrome.storage.local.set({ 
-            apiResults: [],
             apiState: { status: "running", progress: 0, total: request.numbers.length, error: null } 
         });
-        callApiInChunks(request.numbers);
+        callApiInChunks(request.numbers, isAppend);
         sendResponse({ success: true });
         return true;
     }
@@ -76,9 +79,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-async function callApiInChunks(numbers) {
+async function callApiInChunks(numbers, isAppend = false) {
     const CHUNK_SIZE = 100;
     let accumulatedResults = [];
+    
+    if (isAppend) {
+        // Retrieve current results and filter out the numbers we are retrying
+        const res = await chrome.storage.local.get(["apiResults"]);
+        accumulatedResults = res.apiResults || [];
+        accumulatedResults = accumulatedResults.filter(r => !numbers.includes(r.phone_number));
+    }
     
     for (let i = 0; i < numbers.length; i += CHUNK_SIZE) {
         const chunk = numbers.slice(i, i + CHUNK_SIZE);

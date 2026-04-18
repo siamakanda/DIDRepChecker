@@ -1,6 +1,6 @@
 #!/bin/bash
 # One‑command installer for DID Reputation API
-# Usage: curl -sL https://raw.githubusercontent.com/siamakanda/DIDRepChecker/main/bootstrap.sh | sudo bash
+# Usage: curl -sL https://raw.githubusercontent.com/siamakanda/DIDRepChecker/main/scripts/bootstrap.sh | sudo bash
 
 set -e
 
@@ -8,7 +8,7 @@ REPO_URL="https://github.com/siamakanda/DIDRepChecker.git"
 REPO_DIR="/opt/did-reputation-api"
 BRANCH="main"
 
-# Ensure curl is available (though we are already using curl to fetch this script)
+# Ensure curl is available
 if ! command -v curl &> /dev/null; then
     apt update && apt install -y curl
 fi
@@ -29,7 +29,7 @@ else
     cd "$REPO_DIR"
 fi
 
-# Enter the server directory and run the deployment script
-cd server
+# Run the deployment script from the scripts directory
+cd scripts
 chmod +x deploy_lan.sh
 ./deploy_lan.sh
