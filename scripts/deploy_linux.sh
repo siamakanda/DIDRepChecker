@@ -51,6 +51,7 @@ User=www-data
 Group=www-data
 WorkingDirectory=$APP_DIR
 Environment="PATH=$VENV_DIR/bin"
+Environment="PYTHONPATH=$APP_DIR"
 ExecStart=$VENV_DIR/bin/gunicorn -k uvicorn.workers.UvicornWorker --workers 4 --bind unix:$SOCKET_PATH server.api_server:app
 
 [Install]

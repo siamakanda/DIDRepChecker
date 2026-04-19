@@ -31,5 +31,5 @@ fi
 
 # Run the deployment script from the scripts directory
 cd scripts
-chmod +x deploy_lan.sh
-./deploy_lan.sh
+chmod +x deploy_linux.sh
+./deploy_linux.sh

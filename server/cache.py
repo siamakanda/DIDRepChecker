@@ -4,6 +4,8 @@ import logging
 from typing import List, Dict, Tuple, Optional
 import aiosqlite
 
+logger = logging.getLogger(__name__)
+
 class ReputationCache:
     """Async SQLite cache for RoboKiller reputation results."""
 
@@ -66,7 +68,6 @@ class ReputationCache:
                     
                     async with db.execute(f"SELECT * FROM reputation WHERE phone_number IN ({placeholders})", chunk) as cursor:
                         async for row in cursor:
-                            # row: (phone_number, reputation, status, user_reports, total_calls, last_call, scraped_at, timestamp)
                             phone_number = row[0]
                             timestamp = row[7]
                             
@@ -87,7 +88,7 @@ class ReputationCache:
                     numbers_to_scrape.append(num)
                     
         except Exception as e:
-            logging.error(f"Cache read error: {e}")
+            logger.error(f"Cache read error: {e}")
             # If cache fails, degrade gracefully and scrape everything
             return {}, numbers
 
@@ -101,12 +102,8 @@ class ReputationCache:
         await self._init_db()
         current_time = time.time()
 
-        # Prepare data for insertion
         rows = []
         for res in results:
-            # Skip saving Parse Errors or generic Errors if we want to retry them later, 
-            # but usually it's fine to cache a "Not Found" so we don't spam RoboKiller.
-            # However, we'll cache everything and let TTL expire it.
             rows.append((
                 res.get("phone_number"),
                 res.get("reputation", "Unknown"),
@@ -127,4 +124,18 @@ class ReputationCache:
                 ''', rows)
                 await db.commit()
         except Exception as e:
-            logging.error(f"Cache write error: {e}")
+            logger.error(f"Cache write error: {e}")
+
+    async def cleanup_expired(self):
+        """Remove expired records from the cache."""
+        await self._init_db()
+        current_time = time.time()
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute('''
+                    DELETE FROM reputation 
+                    WHERE ? - timestamp > ?
+                ''', (current_time, self.ttl_seconds))
+                await db.commit()
+        except Exception as e:
+            logger.error(f"Cache cleanup error: {e}")

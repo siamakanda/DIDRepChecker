@@ -51,6 +51,8 @@ REFERER_SOURCES = [
     "",
 ]
 
+logger = logging.getLogger(__name__)
+
 # ----------------------------------------------------------------------
 # Helper functions (stateless)
 # ----------------------------------------------------------------------
@@ -166,7 +168,7 @@ def parse_robokiller_html(html_content: str, phone_number: str) -> Dict[str, str
             data['reputation'] = "Invalid Page"
         return data
     except Exception as e:
-        logging.error(f"Parse error for {phone_number}: {e}")
+        logger.error(f"Parse error for {phone_number}: {e}")
         return {
             "phone_number": phone_number,
             "reputation": "Parse Error",
@@ -225,14 +227,33 @@ class RoboKillerScraper:
         if config:
             self.config.update(config)
         self.cache = ReputationCache()
+        self.rate_limiter = RateLimiter(self.config["requests_per_second"])
+        self.session: Optional[aiohttp.ClientSession] = None
+        self.semaphore: Optional[asyncio.Semaphore] = None
 
-    async def _fetch_one(self, session: aiohttp.ClientSession,
-                         phone_number: str,
-                         semaphore: asyncio.Semaphore,
-                         rate_limiter: RateLimiter,
+    async def start(self):
+        """Initialize the aiohttp session and semaphore for the current event loop."""
+        if self.session is None or self.session.closed:
+            connector = aiohttp.TCPConnector(
+                limit=self.config["connection_limit"],
+                keepalive_timeout=self.config["keepalive_timeout"],
+                force_close=False,
+            )
+            self.session = aiohttp.ClientSession(connector=connector)
+        if self.semaphore is None:
+            self.semaphore = asyncio.Semaphore(self.config["concurrent_requests"])
+
+    async def close(self):
+        """Close the aiohttp session."""
+        if self.session and not self.session.closed:
+            await self.session.close()
+        self.session = None
+        self.semaphore = None
+
+    async def _fetch_one(self, phone_number: str,
                          progress_callback: Optional[Callable] = None) -> Dict[str, str]:
-        async with semaphore:
-            await rate_limiter.acquire()
+        async with self.semaphore:
+            await self.rate_limiter.acquire()
             formatted = f"{phone_number[:3]}-{phone_number[3:6]}-{phone_number[6:]}"
             url = f"{self.config['base_url']}/p/{formatted}"
             headers = get_random_headers()
@@ -243,11 +264,11 @@ class RoboKillerScraper:
             )
             for attempt in range(self.config["max_retries"] + 1):
                 try:
-                    async with session.get(url, headers=headers, timeout=timeout) as resp:
+                    async with self.session.get(url, headers=headers, timeout=timeout) as resp:
                         if resp.status == 403:
                             result = self._error_result(phone_number, "Blocked")
                         elif resp.status == 429:
-                            rate_limiter.record_429()
+                            self.rate_limiter.record_429()
                             await asyncio.sleep(2 ** attempt)
                             continue
                         elif resp.status == 200:
@@ -263,11 +284,15 @@ class RoboKillerScraper:
                     result = self._error_result(phone_number, "Timeout")
                 except aiohttp.ClientConnectorError:
                     result = self._error_result(phone_number, "ConnectionError")
-                except Exception:
+                except Exception as e:
+                    logger.exception(f"Unexpected error for {phone_number}: {e}")
                     result = self._error_result(phone_number, "Error")
                 else:
                     if progress_callback:
-                        await progress_callback(phone_number, result)
+                        if asyncio.iscoroutinefunction(progress_callback):
+                            await progress_callback(phone_number, result)
+                        else:
+                            progress_callback(phone_number, result)
                     return result
 
                 if attempt < self.config["max_retries"]:
@@ -275,7 +300,10 @@ class RoboKillerScraper:
 
             result = self._error_result(phone_number, "Error")
             if progress_callback:
-                await progress_callback(phone_number, result)
+                if asyncio.iscoroutinefunction(progress_callback):
+                    await progress_callback(phone_number, result)
+                else:
+                    progress_callback(phone_number, result)
             return result
 
     def _error_result(self, phone_number: str, reason: str) -> Dict[str, str]:
@@ -311,26 +339,30 @@ class RoboKillerScraper:
         if not numbers_to_scrape:
             return list(cached_results.values())
 
-        connector = aiohttp.TCPConnector(
-            limit=self.config["connection_limit"],
-            keepalive_timeout=self.config["keepalive_timeout"],
-            force_close=False,
-        )
-        rate_limiter = RateLimiter(self.config["requests_per_second"])
-        semaphore = asyncio.Semaphore(self.config["concurrent_requests"])
-        async with aiohttp.ClientSession(connector=connector) as session:
+        # Ensure session and semaphore are initialised
+        await self.start()
+        try:
             tasks = [
-                self._fetch_one(session, num, semaphore, rate_limiter, progress_callback)
+                self._fetch_one(num, progress_callback)
                 for num in numbers_to_scrape
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            valid_new_results = [r for r in results if not isinstance(r, Exception)]
+            valid_new_results = []
+            for r in results:
+                if isinstance(r, Exception):
+                    logger.error(f"Scrape task failed: {r}")
+                else:
+                    valid_new_results.append(r)
             
             # 4. Save new results to cache
             await self.cache.save(valid_new_results)
             
             # 5. Return combined list
             return list(cached_results.values()) + valid_new_results
+        finally:
+            # Do NOT close the session here – it should be managed by the lifespan of the API.
+            # For CLI usage, the caller should call close().
+            pass
 
     def scrape(self,
                phone_numbers: List[str],
@@ -343,7 +375,16 @@ class RoboKillerScraper:
             cb = async_cb
         else:
             cb = progress_callback
-        return asyncio.run(self.scrape_async(phone_numbers, cb))
+
+        async def _run():
+            await self.start()
+            try:
+                return await self.scrape_async(phone_numbers, cb)
+            finally:
+                await self.close()
+
+        # Since this is a sync wrapper, we can safely run a new event loop.
+        return asyncio.run(_run())
 
 
 # ----------------------------------------------------------------------

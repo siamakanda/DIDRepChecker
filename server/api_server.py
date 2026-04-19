@@ -7,15 +7,45 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Dict
+from contextlib import asynccontextmanager
+import asyncio
+import logging
 from server.scraper_engine import RoboKillerScraper
+
+logger = logging.getLogger(__name__)
+
+# ----------------------------------------------------------------------
+# Scraper instance (reused across requests)
+# ----------------------------------------------------------------------
+scraper = RoboKillerScraper()
 
 # ----------------------------------------------------------------------
 # FastAPI app setup
 # ----------------------------------------------------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await scraper.start()
+    await scraper.cache._init_db()  # ensure cache db exists
+    
+    async def periodic_cleanup():
+        while True:
+            await asyncio.sleep(3600)  # Every hour
+            await scraper.cache.cleanup_expired()
+            
+    cleanup_task = asyncio.create_task(periodic_cleanup())
+    
+    yield
+    
+    # Shutdown
+    cleanup_task.cancel()
+    await scraper.close()
+
 app = FastAPI(
     title="DID Reputation API",
     description="Returns reputation, total calls, user reports, and last call for phone numbers.",
-    version="2.0.0"
+    version="2.0.0",
+    lifespan=lifespan
 )
 
 # Enable CORS for Chrome extension and local development
@@ -43,11 +73,6 @@ class NumberResult(BaseModel):
     scraped_at: str
 
 # ----------------------------------------------------------------------
-# Scraper instance (reused across requests)
-# ----------------------------------------------------------------------
-scraper = RoboKillerScraper()
-
-# ----------------------------------------------------------------------
 # Endpoints
 # ----------------------------------------------------------------------
 @app.post("/scrape", response_model=List[NumberResult])
@@ -59,7 +84,8 @@ async def scrape_numbers(request: NumbersRequest):
         results = await scraper.scrape_async(request.numbers)
         return results
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Scrape endpoint error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/health", response_model=Dict[str, str])
 async def health_check():

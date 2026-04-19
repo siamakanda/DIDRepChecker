@@ -2,324 +2,8 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-    :root {
-      /* Light Theme Colors */
-      --bg-base: #f8fafc;
-      --bg-panel: #ffffff;
-      --bg-tab-inactive: #f1f5f9;
-      --bg-tab-hover: #e2e8f0;
-      --bg-header: rgba(255, 255, 255, 0.85);
-      --bg-hover: #f1f5f9;
-      --text-main: #0f172a;
-      --text-muted: #64748b;
-      --border-color: #e2e8f0;
-      --primary: #3b82f6;
-      --primary-hover: #2563eb;
-      --secondary: #64748b;
-      --secondary-hover: #475569;
-      --success: #10b981;
-      --success-hover: #059669;
-      --radius: 8px;
-      --shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
-    }
-
-    body.dark-theme {
-      --bg-base: #0f172a;
-      --bg-panel: #1e293b;
-      --bg-tab-inactive: #0f172a;
-      --bg-tab-hover: #334155;
-      --bg-header: rgba(30, 41, 59, 0.85);
-      --bg-hover: #334155;
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --border-color: #334155;
-      --primary: #3b82f6;
-      --primary-hover: #60a5fa;
-      --secondary: #475569;
-      --secondary-hover: #64748b;
-      --success: #10b981;
-      --success-hover: #34d399;
-    }
-
-    * { box-sizing: border-box; }
-    
-    body {
-      width: 760px;
-      max-height: 700px;
-      margin: 0;
-      padding: 0;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg-base);
-      color: var(--text-main);
-      transition: background 0.3s ease, color 0.3s ease;
-    }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: var(--bg-base); }
-    ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--secondary); }
-
-    /* Tabs */
-    .tabs {
-      display: flex;
-      background: var(--bg-panel);
-      border-bottom: 1px solid var(--border-color);
-      position: sticky;
-      top: 0;
-      z-index: 10;
-    }
-    .tab {
-      flex: 1;
-      padding: 12px;
-      text-align: center;
-      cursor: pointer;
-      background: var(--bg-tab-inactive);
-      color: var(--text-muted);
-      border: none;
-      font-weight: 600;
-      font-size: 14px;
-      transition: all 0.2s ease;
-    }
-    .tab:hover { background: var(--bg-tab-hover); color: var(--text-main); }
-    .tab.active {
-      background: var(--bg-panel);
-      border-bottom: 3px solid var(--primary);
-      color: var(--primary);
-    }
-
-    /* Stats bar */
-    .stats-bar {
-      display: flex;
-      gap: 20px;
-      padding: 10px 15px;
-      background: var(--bg-panel);
-      border-bottom: 1px solid var(--border-color);
-      font-size: 13px;
-      font-weight: 500;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    }
-    .stats-bar span { font-weight: 700; color: var(--primary); }
-
-    /* Panels */
-    .panel {
-      display: none;
-      padding: 15px;
-      background: var(--bg-panel);
-      overflow-y: auto;
-      max-height: 580px;
-      animation: fadeIn 0.3s ease;
-    }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-    .panel.active-panel { display: block; }
-
-    /* Sticky action bar */
-    .sticky-bar {
-      position: sticky;
-      bottom: 0;
-      background: var(--bg-header);
-      backdrop-filter: blur(8px);
-      padding: 12px;
-      border-top: 1px solid var(--border-color);
-      border-radius: var(--radius);
-      margin-top: 10px;
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      z-index: 5;
-      box-shadow: 0 -4px 6px -1px rgba(0,0,0,0.05);
-    }
-
-    /* Buttons */
-    button {
-      background: var(--primary);
-      color: white;
-      border: none;
-      border-radius: var(--radius);
-      padding: 8px 14px;
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 13px;
-      transition: all 0.2s ease;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    button:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    button:active { transform: translateY(0); box-shadow: none; }
-    button.secondary { background: var(--secondary); }
-    button.secondary:hover { background: var(--secondary-hover); }
-    button.success { background: var(--success); }
-    button.success:hover { background: var(--success-hover); }
-
-    /* Lists & Tables */
-    .number-list, .results-container {
-      max-height: 280px;
-      overflow-y: auto;
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius);
-      padding: 0;
-      background: var(--bg-panel);
-    }
-    .number-list { padding: 8px; }
-    
-    .number-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 6px 8px;
-      border-radius: 4px;
-      transition: background 0.2s ease;
-    }
-    .number-item:hover { background: var(--bg-hover); }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-    th, td {
-      border-bottom: 1px solid var(--border-color);
-      padding: 10px 8px;
-      text-align: left;
-    }
-    th {
-      background: var(--bg-header);
-      backdrop-filter: blur(8px);
-      cursor: pointer;
-      position: sticky;
-      top: 0;
-      font-weight: 600;
-      color: var(--text-muted);
-      z-index: 2;
-    }
-    tr:hover td { background: var(--bg-hover); }
-    .checkbox-col { width: 40px; text-align: center; }
-
-    /* Custom Checkboxes */
-    input[type="checkbox"] {
-      appearance: none;
-      width: 18px;
-      height: 18px;
-      border: 2px solid var(--secondary);
-      border-radius: 4px;
-      cursor: pointer;
-      position: relative;
-      transition: all 0.2s ease;
-      background: transparent;
-    }
-    input[type="checkbox"]:checked {
-      background: var(--primary);
-      border-color: var(--primary);
-    }
-    input[type="checkbox"]:checked::after {
-      content: '';
-      position: absolute;
-      left: 5px;
-      top: 1px;
-      width: 4px;
-      height: 9px;
-      border: solid white;
-      border-width: 0 2px 2px 0;
-      transform: rotate(45deg);
-    }
-
-    /* Inputs */
-    select, input[type="text"], input[type="number"] {
-      padding: 6px 10px;
-      border-radius: var(--radius);
-      border: 1px solid var(--border-color);
-      background: var(--bg-panel);
-      color: var(--text-main);
-      font-family: inherit;
-      font-size: 13px;
-      transition: border-color 0.2s ease;
-    }
-    select:focus, input:focus { outline: none; border-color: var(--primary); }
-    .input-small { width: 70px; }
-    
-    .filter-row {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      margin-bottom: 15px;
-      flex-wrap: wrap;
-    }
-
-    /* Progress Overlay */
-    .progress-overlay {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.6);
-      backdrop-filter: blur(3px);
-      z-index: 1000;
-      justify-content: center;
-      align-items: center;
-    }
-    .spinner {
-      background: var(--bg-panel);
-      padding: 30px;
-      border-radius: 16px;
-      text-align: center;
-      box-shadow: var(--shadow);
-    }
-    .spinner::before {
-      content: "⏳";
-      display: block;
-      animation: spin 1s linear infinite;
-      font-size: 40px;
-      margin-bottom: 15px;
-    }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-    .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 14px; }
-    .api-url-item { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
-    .status { font-size: 12px; margin-top: 8px; color: var(--text-muted); }
-    .results-footer { margin-top: 10px; text-align: right; font-size: 12px; color: var(--text-muted); }
-
-    /* Dark Mode Toggle Switch */
-    .toggle-container {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-top: 15px;
-      font-size: 14px;
-      font-weight: 500;
-    }
-    .switch {
-      position: relative;
-      display: inline-block;
-      width: 44px;
-      height: 24px;
-    }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background-color: var(--border-color);
-      transition: .3s;
-      border-radius: 24px;
-    }
-    .slider:before {
-      position: absolute;
-      content: "";
-      height: 18px;
-      width: 18px;
-      left: 3px;
-      bottom: 3px;
-      background-color: white;
-      transition: .3s;
-      border-radius: 50%;
-    }
-    input:checked + .slider { background-color: var(--primary); }
-    input:checked + .slider:before { transform: translateX(20px); }
-  </style>
+  <title>DID Reputation Selector</title>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
 <div class="tabs">
@@ -328,33 +12,55 @@
   <button class="tab" data-tab="settings">⚙️ Settings</button>
 </div>
 
-<!-- Statistics Bar -->
+<!-- Stats Bar -->
 <div class="stats-bar">
-  <div>📦 Captured: <span id="statCaptured">0</span></div>
-  <div>📤 Sent: <span id="statSent">0</span></div>
-  <div>📊 Results: <span id="statResults">0</span></div>
-  <div>✅ Selected on Page: <span id="statSelectedOnPage">0</span></div>
+  <div class="stats-card"><div class="label">📦 Captured</div><span id="statCaptured">0</span></div>
+  <div class="stats-card"><div class="label">📤 Sent</div><span id="statSent">0</span></div>
+  <div class="stats-card"><div class="label">📊 Results</div><span id="statResults">0</span></div>
+  <div class="stats-card"><div class="label">✅ Selected</div><span id="statSelectedOnPage">0</span></div>
 </div>
 
-<!-- Numbers Panel -->
+<!-- Numbers Tab -->
 <div id="numbersPanel" class="panel active-panel">
+  <!-- Paste Section -->
+  <div class="paste-section">
+    <button id="showPasteBoxBtn" class="secondary">📋 Paste Numbers</button>
+    <div id="pasteBox" style="display: none;">
+      <textarea id="pasteNumbersTextarea" rows="3" placeholder="Enter phone numbers (one per line, comma, space)"></textarea>
+      <div class="paste-buttons">
+        <button id="usePastedNumbersBtn" class="success">Use Pasted</button>
+        <button id="cancelPasteBtn" class="secondary">Cancel</button>
+      </div>
+    </div>
+    <button id="resetToCapturedBtn" class="secondary" style="display: none;">↻ Reset to Captured</button>
+  </div>
+
+  <!-- Number List -->
+  <div class="list-header">
+    <span>Available Numbers</span>
+    <div>
+      <button id="selectAllBtn" class="secondary tiny">Check All</button>
+      <button id="deselectAllBtn" class="secondary tiny">Uncheck All</button>
+    </div>
+  </div>
   <div class="number-list" id="numbersContainer">Loading numbers...</div>
-  <div class="sticky-bar">
-    <button id="selectAllBtn" class="secondary">✅ Check All</button>
-    <button id="deselectAllBtn" class="secondary">❌ Uncheck All</button>
+
+  <!-- Action Bar -->
+  <div class="action-bar">
     <button id="sendSelectedBtn" class="success">📤 Check Reputation (Selected)</button>
-    <div style="flex:1"></div>
-    <span>Top <input type="number" id="topNPage" value="70" min="1" class="input-small"> from page</span>
-    <button id="sendTopPageBtn">📤 Check Top N from Page</button>
+    <div class="action-right">
+      <span>Top <input type="number" id="topNPage" value="70" min="1" class="input-small"></span>
+      <button id="sendTopPageBtn">Send Top N</button>
+    </div>
   </div>
 </div>
 
-<!-- Results Panel -->
+<!-- Results Tab -->
 <div id="resultsPanel" class="panel">
-  <div id="resultsPlaceholder" class="empty-state">📭 No results yet.<br>Send numbers from the Numbers tab.</div>
+  <div id="resultsPlaceholder" class="empty-state">No results yet.<br>Send numbers from the Numbers tab.</div>
   <div id="resultsContent" style="display:none;">
-    <div class="filter-row">
-      <span>Filter:</span>
+    <!-- Filter & Sort Bar -->
+    <div class="filter-bar">
       <select id="filterSelect">
         <option value="all">All</option>
         <option value="Positive">✅ Positive</option>
@@ -362,18 +68,20 @@
         <option value="Neutral">🟡 Neutral</option>
         <option value="Blocked">🚫 Blocked/Error</option>
       </select>
-      <span>Sort by:</span>
       <select id="sortSelect">
         <option value="total_calls">Total Calls</option>
         <option value="user_reports">User Reports</option>
         <option value="reputation">Reputation</option>
         <option value="phone_number">Phone Number</option>
       </select>
-      <button id="sortAscBtn">▲ Asc</button>
-      <button id="sortDescBtn">▼ Desc</button>
-      <button id="copyResultsBtn" class="secondary">📋 Copy DIDs to Clipboard</button>
-      <button id="retryErrorsBtn" class="secondary">🔄 Retry Errors</button>
+      <button id="sortAscBtn" class="secondary tiny">▲ Asc</button>
+      <button id="sortDescBtn" class="secondary tiny">▼ Desc</button>
+      <div style="flex:1"></div>
+      <button id="copyResultsBtn" class="secondary tiny">📋 Copy DIDs</button>
+      <button id="retryErrorsBtn" class="secondary tiny">🔄 Retry</button>
     </div>
+
+    <!-- Results Table -->
     <div class="results-container">
       <table id="resultsTable">
         <thead>
@@ -382,52 +90,60 @@
             <th data-field="phone_number">DID</th>
             <th data-field="reputation">Reputation</th>
             <th data-field="robokiller_status">Robokiller</th>
-            <th data-field="total_calls">Total Calls</th>
-            <th data-field="user_reports">Reports</th>
+            <th data-field="total_calls">Calls</th>
+            <th data-field="user_reports">Rpts</th>
             <th data-field="last_call">Last Call</th>
           </tr>
         </thead>
         <tbody id="resultsBody"></tbody>
       </table>
     </div>
-    <div class="results-footer">
-      Showing <span id="displayedCount">0</span> of <span id="totalResultCount">0</span> DIDs
-    </div>
-    <div class="sticky-bar">
-      <span>Top <input type="number" id="topNResults" value="20" min="1" class="input-small"> from results</span>
-      <button id="selectTopResultsBtn" class="success">🔘 Select on Page (Top N)</button>
-      <button id="selectCheckedResultsBtn" class="success">🔘 Select Checked on Page</button>
-      <button id="exportResultsBtn" class="secondary">💾 Export to CSV</button>
+    <div class="results-footer">Showing <span id="displayedCount">0</span> of <span id="totalResultCount">0</span> DIDs</div>
+
+    <!-- Action Bar -->
+    <div class="action-bar">
+      <div class="action-left">
+        <span>Top <input type="number" id="topNResults" value="20" min="1" class="input-small"></span>
+        <button id="selectTopResultsBtn" class="success">Select on Page (Top N)</button>
+      </div>
+      <div class="action-right">
+        <button id="selectCheckedResultsBtn" class="success">Select Checked</button>
+        <button id="exportResultsBtn" class="secondary tiny">💾 Export CSV</button>
+        <button id="clearResultsBtn" class="secondary tiny">🗑️ Clear</button>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- Settings Panel -->
+<!-- Settings Tab -->
 <div id="settingsPanel" class="panel">
-  <div>🌐 API Endpoints (fallback order)</div>
+  <div class="section-title">🌐 API Endpoints (fallback order)</div>
   <div id="apiUrlsList"></div>
-  <div style="display: flex; gap: 8px; margin-top: 12px;">
-    <input type="text" id="newApiUrl" placeholder="http://.../scrape" style="flex:1;">
-    <button id="addApiUrlBtn">➕ Add Endpoint</button>
+  <div class="add-endpoint">
+    <input type="text" id="newApiUrl" placeholder="http://.../scrape">
+    <button id="addApiUrlBtn">➕ Add</button>
   </div>
   <div id="apiStatus" class="status"></div>
   <hr>
-  <button id="clearStorageBtn" class="secondary">🗑️ Clear Stored Results</button>
-  <div class="toggle-container">
-    <span>🌙 Dark Mode</span>
-    <label class="switch">
-      <input type="checkbox" id="darkModeToggle">
-      <span class="slider"></span>
-    </label>
+  <div class="settings-row">
+    <button id="clearStorageBtn" class="secondary">🗑️ Clear Stored Results</button>
+    <div class="toggle-container">
+      <span>🌙 Dark Mode</span>
+      <label class="switch">
+        <input type="checkbox" id="darkModeToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
   </div>
-  <div class="status" style="margin-top: 15px;">Version 2.0</div>
+  <div class="footer-version">Version 2.0</div>
 </div>
 
 <div id="progressOverlay" class="progress-overlay">
   <div class="spinner">
-    <div id="progressText" style="font-weight:bold; color:var(--text-main); font-size:15px;">Checking reputation...</div>
+    <div id="progressText">Checking reputation...</div>
   </div>
 </div>
+
 <script src="popup.js"></script>
 </body>
 </html>

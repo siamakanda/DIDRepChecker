@@ -1,5 +1,21 @@
 @echo off
-cd ..
+title DID Reputation API Server
+echo =======================================
+echo DID Reputation API Server (FastAPI)
+echo =======================================
+echo.
+
+REM Change directory to project root so venv is created globally
+cd /d "%~dp0.."
+
+REM Check if Python is installed
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo Python is not installed or not in PATH.
+    echo Please install Python 3.9+ from https://python.org
+    pause
+    exit /b 1
+)
 
 REM Create virtual environment if it doesn't exist
 if not exist "venv" (
@@ -30,12 +46,5 @@ if exist "requirements.txt" (
 )
 
 echo.
-echo Starting FastAPI server on http://localhost:8000
-echo API docs available at http://localhost:8000/docs
-echo Press Ctrl+C to stop the server.
-echo.
-
-REM Run Uvicorn (reload enabled for development)
-uvicorn server.api_server:app --host 0.0.0.0 --port 8000 --reload
-
+echo Installation complete. You can now run run_windows.bat to start the server.
 pause

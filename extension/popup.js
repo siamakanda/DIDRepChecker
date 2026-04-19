@@ -1,4 +1,4 @@
-// popup.js – Full version with persistent settings and row selection
+// popup.js – Full version with restructured UI, persistent settings, row selection, paste input
 
 // DOM elements
 const numbersContainer = document.getElementById("numbersContainer");
@@ -23,8 +23,17 @@ const newApiUrlInput = document.getElementById("newApiUrl");
 const addApiUrlBtn = document.getElementById("addApiUrlBtn");
 const apiStatus = document.getElementById("apiStatus");
 const clearStorageBtn = document.getElementById("clearStorageBtn");
+const clearResultsBtn = document.getElementById("clearResultsBtn");
 const progressOverlay = document.getElementById("progressOverlay");
 const selectAllRowsCheckbox = document.getElementById("selectAllRows");
+
+// Paste elements
+const showPasteBoxBtn = document.getElementById("showPasteBoxBtn");
+const pasteBox = document.getElementById("pasteBox");
+const pasteNumbersTextarea = document.getElementById("pasteNumbersTextarea");
+const usePastedNumbersBtn = document.getElementById("usePastedNumbersBtn");
+const cancelPasteBtn = document.getElementById("cancelPasteBtn");
+const resetToCapturedBtn = document.getElementById("resetToCapturedBtn");
 
 function setApiStatusText(text) {
     apiStatus.innerText = text;
@@ -41,6 +50,25 @@ let currentSortAsc = true;
 let currentFilter = "all";
 let lastSelectedCount = 0;
 let lastSentCount = 0;
+let originalCapturedNumbers = [];
+
+// Helper: Clean phone number
+function cleanNumberSimple(input) {
+    if (!input) return "";
+    let cleaned = input.toString().replace(/\D/g, "");
+    if (cleaned.startsWith("1") && cleaned.length === 11) cleaned = cleaned.slice(1);
+    return cleaned.length === 10 ? cleaned : "";
+}
+
+function parsePastedNumbers(text) {
+    const parts = text.split(/[\n, ]+/);
+    const numbers = [];
+    for (let part of parts) {
+        const cleaned = cleanNumberSimple(part);
+        if (cleaned) numbers.push(cleaned);
+    }
+    return [...new Set(numbers)];
+}
 
 // ---------- Persistence Keys ----------
 const PREF_KEYS = {
@@ -120,6 +148,7 @@ async function loadCapturedNumbers() {
     try {
         const response = await chrome.runtime.sendMessage({ action: "getCapturedNumbers" });
         const newNumbers = response.numbers || [];
+        originalCapturedNumbers = [...newNumbers];
         if (JSON.stringify(capturedNumbers) !== JSON.stringify(newNumbers)) {
             await clearApiResults();
             lastSelectedCount = 0;
@@ -128,8 +157,10 @@ async function loadCapturedNumbers() {
         capturedNumbers = newNumbers;
         if (capturedNumbers.length) {
             renderNumberList();
+            resetToCapturedBtn.style.display = "none";
+            showPasteBoxBtn.style.display = "inline-flex";
         } else {
-            numbersContainer.innerHTML = '<div class="empty-state">📭 No numbers captured yet. Refresh the Peerless page.</div>';
+            numbersContainer.innerHTML = '<div class="empty-state">📭 No numbers captured yet. Refresh the Peerless page or paste numbers.</div>';
             selectedNumbersToSend = [];
         }
         updateStats();
@@ -159,7 +190,7 @@ function updateSelectedNumbers() {
     updateStats();
 }
 
-// API call to reputation server
+// API call to reputation server (background handles chunking)
 async function callReputationApi(numbers, description = "numbers") {
     if (!numbers.length) {
         apiStatus.innerText = "No numbers to send.";
@@ -208,7 +239,7 @@ function updateFilterDropdown() {
 
 function renderResultsTable() {
     if (!apiResults.length) {
-        document.getElementById("resultsBody").innerHTML = '<tr><td colspan="7" class="empty-state">No results to display.</td></tr>';
+        document.getElementById("resultsBody").innerHTML = '<tr><td colspan="7" class="empty-state">No results to display. </td> <tr>';
         document.getElementById("displayedCount").innerText = "0";
         document.getElementById("totalResultCount").innerText = "0";
         if (selectAllRowsCheckbox) selectAllRowsCheckbox.checked = false;
@@ -364,7 +395,49 @@ function exportResultsCSV() {
     apiStatus.innerText = "CSV exported.";
 }
 
-// Event listeners
+// ---------- Paste Numbers Logic ----------
+showPasteBoxBtn.addEventListener("click", () => {
+    pasteBox.style.display = "block";
+    showPasteBoxBtn.style.display = "none";
+    pasteNumbersTextarea.value = "";
+});
+cancelPasteBtn.addEventListener("click", () => {
+    pasteBox.style.display = "none";
+    showPasteBoxBtn.style.display = "inline-flex";
+});
+usePastedNumbersBtn.addEventListener("click", () => {
+    const raw = pasteNumbersTextarea.value;
+    if (!raw.trim()) {
+        apiStatus.innerText = "No numbers entered.";
+        return;
+    }
+    const numbers = parsePastedNumbers(raw);
+    if (numbers.length === 0) {
+        apiStatus.innerText = "No valid phone numbers found.";
+        return;
+    }
+    capturedNumbers = numbers;
+    selectedNumbersToSend = [...capturedNumbers];
+    renderNumberList();
+    updateStats();
+    chrome.storage.local.set({ capturedNumbers: capturedNumbers });
+    apiStatus.innerText = `✅ Loaded ${numbers.length} pasted numbers.`;
+    pasteBox.style.display = "none";
+    showPasteBoxBtn.style.display = "none";
+    resetToCapturedBtn.style.display = "inline-flex";
+});
+resetToCapturedBtn.addEventListener("click", async () => {
+    capturedNumbers = [...originalCapturedNumbers];
+    selectedNumbersToSend = [...capturedNumbers];
+    renderNumberList();
+    updateStats();
+    apiStatus.innerText = `↻ Reset to ${capturedNumbers.length} auto-captured numbers.`;
+    resetToCapturedBtn.style.display = "none";
+    showPasteBoxBtn.style.display = "inline-flex";
+    chrome.storage.local.set({ capturedNumbers: capturedNumbers });
+});
+
+// ---------- Event Listeners ----------
 sendSelectedBtn.addEventListener("click", () => callReputationApi(selectedNumbersToSend, "selected numbers"));
 sendTopPageBtn.addEventListener("click", () => {
     let n = parseInt(topNPageInput.value);
@@ -430,7 +503,6 @@ exportResultsBtn.addEventListener("click", exportResultsCSV);
 topNPageInput.addEventListener("change", savePreferences);
 topNResultsInput.addEventListener("change", savePreferences);
 
-// Select all rows checkbox
 if (selectAllRowsCheckbox) {
     selectAllRowsCheckbox.addEventListener("change", (e) => {
         const isChecked = e.target.checked;
@@ -464,6 +536,9 @@ clearStorageBtn.addEventListener("click", async () => {
     apiStatus.innerText = "Stored results cleared.";
     loadCapturedNumbers();
 });
+if (clearResultsBtn) {
+    clearResultsBtn.addEventListener("click", clearApiResults);
+}
 
 // Storage listener for state and results
 chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -525,7 +600,6 @@ chrome.storage.local.get(['darkMode'], (res) => {
         if (darkModeToggle) darkModeToggle.checked = true;
     }
 });
-
 if (darkModeToggle) {
     darkModeToggle.addEventListener('change', (e) => {
         if (e.target.checked) {
@@ -553,30 +627,19 @@ chrome.runtime.sendMessage({ action: "getApiResults" }, (response) => {
     }
 });
 
-// Add "Clear Results" button to Results tab's sticky bar
-const clearResultsBtn = document.createElement("button");
-clearResultsBtn.innerText = "🗑️ Clear Results";
-clearResultsBtn.className = "secondary";
-clearResultsBtn.style.marginLeft = "auto";
-clearResultsBtn.addEventListener("click", clearApiResults);
-document.querySelector("#resultsPanel .sticky-bar").appendChild(clearResultsBtn);
-
 // Retry Errors Button Logic
 const retryErrorsBtn = document.getElementById("retryErrorsBtn");
 if (retryErrorsBtn) {
     retryErrorsBtn.addEventListener("click", () => {
         if (!apiResults || apiResults.length === 0) return;
-        
         const errorKeywords = ['Error', 'Timeout', 'Blocked', 'HTTP', 'Parse Error'];
         const failedNumbers = apiResults
             .filter(r => errorKeywords.some(err => r.reputation && r.reputation.includes(err)))
             .map(r => r.phone_number);
-            
         if (failedNumbers.length === 0) {
             setApiStatusText("No failed numbers found to retry.");
             return;
         }
-        
         setApiStatusText(`Retrying ${failedNumbers.length} failed numbers...`);
         showProgress(true);
         chrome.runtime.sendMessage({ action: "startReputationCheck", numbers: failedNumbers, append: true });
