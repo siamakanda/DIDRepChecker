@@ -1,5 +1,6 @@
 import time
 import os
+import sys
 import logging
 from typing import List, Dict, Tuple, Optional
 import aiosqlite
@@ -11,7 +12,14 @@ class ReputationCache:
 
     def __init__(self, db_path: str = None, ttl_seconds: int = 86400):
         if db_path is None:
-            self.db_path = os.path.join(os.path.dirname(__file__), "reputation_cache.db")
+            # Use user-writable directory
+            if sys.platform == "win32":
+                appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~\\AppData\\Local"))
+                cache_dir = os.path.join(appdata, "DIDReputationAPI")
+            else:
+                cache_dir = os.path.expanduser("~/.cache/did-reputation-api")
+            os.makedirs(cache_dir, exist_ok=True)
+            self.db_path = os.path.join(cache_dir, "reputation_cache.db")
         else:
             self.db_path = db_path
         self.ttl_seconds = ttl_seconds
@@ -22,7 +30,7 @@ class ReputationCache:
         if self._initialized:
             return
 
-        # Ensure the directory exists if db_path is not just a filename
+        # Ensure the directory exists (already done in __init__, but safe)
         db_dir = os.path.dirname(self.db_path)
         if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir, exist_ok=True)
