@@ -1,4 +1,4 @@
-// popup.js – Full version with restructured UI, persistent settings, row selection, paste input
+// popup.js – Full version with default Positive filter, auto‑switch to Results, and selection count message
 
 // DOM elements
 const numbersContainer = document.getElementById("numbersContainer");
@@ -47,7 +47,7 @@ let selectedNumbersToSend = [];
 let apiResults = [];
 let currentSortField = "total_calls";
 let currentSortAsc = true;
-let currentFilter = "all";
+let currentFilter = "Positive";   // ✅ Default to Positive
 let lastSelectedCount = 0;
 let lastSentCount = 0;
 let originalCapturedNumbers = [];
@@ -92,7 +92,14 @@ async function savePreferences() {
 
 async function loadPreferences() {
     const prefs = await chrome.storage.local.get(Object.values(PREF_KEYS));
-    if (prefs[PREF_KEYS.filter]) filterSelect.value = prefs[PREF_KEYS.filter];
+    if (prefs[PREF_KEYS.filter]) {
+        filterSelect.value = prefs[PREF_KEYS.filter];
+        currentFilter = filterSelect.value;
+    } else {
+        // No saved filter – set to Positive
+        filterSelect.value = "Positive";
+        currentFilter = "Positive";
+    }
     if (prefs[PREF_KEYS.sortField]) sortSelect.value = prefs[PREF_KEYS.sortField];
     if (typeof prefs[PREF_KEYS.sortAsc] === 'boolean') currentSortAsc = prefs[PREF_KEYS.sortAsc];
     if (prefs[PREF_KEYS.topNPage]) topNPageInput.value = prefs[PREF_KEYS.topNPage];
@@ -117,6 +124,13 @@ tabs.forEach(tab => {
         panels[target].classList.add("active-panel");
     });
 });
+
+function switchToResultsTab() {
+    const resultsTab = document.querySelector('.tab[data-tab="results"]');
+    if (resultsTab && !resultsTab.classList.contains("active")) {
+        resultsTab.click();
+    }
+}
 
 function showProgress(show) {
     progressOverlay.style.display = show ? "flex" : "none";
@@ -239,7 +253,7 @@ function updateFilterDropdown() {
 
 function renderResultsTable() {
     if (!apiResults.length) {
-        document.getElementById("resultsBody").innerHTML = '<tr><td colspan="7" class="empty-state">No results to display. </td> <tr>';
+        document.getElementById("resultsBody").innerHTML = '<tr><td colspan="7" class="empty-state">No results to display. </td> </table>';
         document.getElementById("displayedCount").innerText = "0";
         document.getElementById("totalResultCount").innerText = "0";
         if (selectAllRowsCheckbox) selectAllRowsCheckbox.checked = false;
@@ -326,7 +340,8 @@ async function selectNumbersOnPage(numbers) {
             lastSelectedCount = response.selected;
             await chrome.storage.local.set({ lastSelectedCount: lastSelectedCount });
             updateStats();
-            apiStatus.innerText = `✅ Selected ${lastSelectedCount} numbers on page.`;
+            // ✅ Show explicit selection count
+            apiStatus.innerText = `✅ Selected ${lastSelectedCount} numbers on Peerless page.`;
         } else {
             apiStatus.innerText = `❌ Selection error: ${response?.error || "unknown"}`;
         }
@@ -555,7 +570,8 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
                     }
                 } else if (state.status === "completed") {
                     showProgress(false);
-                    setApiStatusText(`✅ Received reputation results.`);
+                    const count = apiResults.length;
+                    setApiStatusText(`✅ Checked ${count} numbers.`);
                 } else if (state.status === "error") {
                     showProgress(false);
                     setApiStatusText(`❌ API error: ${state.error}`);
@@ -568,11 +584,17 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         if (changes.apiResults) {
             apiResults = changes.apiResults.newValue || [];
             if (apiResults.length > 0) {
+                // Ensure filter is set to Positive if no user preference yet
+                if (currentFilter === "all" || !filterSelect.value) {
+                    filterSelect.value = "Positive";
+                    currentFilter = "Positive";
+                }
                 updateFilterDropdown();
                 renderResultsTable();
                 resultsPlaceholder.style.display = "none";
                 resultsContent.style.display = "block";
                 updateStats();
+                switchToResultsTab();
             }
         }
     }
@@ -619,11 +641,18 @@ loadApiUrls();
 chrome.runtime.sendMessage({ action: "getApiResults" }, (response) => {
     if (response.results && response.results.length) {
         apiResults = response.results;
+        // Force Positive filter if none saved
+        if (currentFilter === "all" || !filterSelect.value) {
+            filterSelect.value = "Positive";
+            currentFilter = "Positive";
+        }
         updateFilterDropdown();
         renderResultsTable();
         resultsPlaceholder.style.display = "none";
         resultsContent.style.display = "block";
         updateStats();
+        switchToResultsTab();
+        setApiStatusText(`✅ Loaded ${apiResults.length} results from storage.`);
     }
 });
 

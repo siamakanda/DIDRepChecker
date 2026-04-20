@@ -20,3 +20,5 @@ play.py
 .DS_Store
 .env
 *.spec
+*.db
+*.sqlite

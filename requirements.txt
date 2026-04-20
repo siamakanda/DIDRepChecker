@@ -1,9 +1,17 @@
-# Core async scraping
+# Core async scraping (CLI and server)
 aiohttp>=3.8.0
 lxml>=4.9.0
 
-# API server
+# API server (FastAPI)
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 pydantic-settings>=2.0.0
 aiosqlite>=0.19.0
+
+# CLI & utilities
+rich>=13.0.0
+tqdm>=4.65.0
+pyperclip>=1.8.0
+
+# API client (optional, for api_client.py)
+requests>=2.31.0

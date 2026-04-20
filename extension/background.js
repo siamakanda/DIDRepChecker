@@ -1,6 +1,6 @@
 // background.js – Service worker: API calls, storage, message routing
 
-let apiUrls = ["http://localhost:5000/scrape"];
+let apiUrls = ["http://localhost:8000/scrape"];
 
 // Load stored API URLs
 chrome.storage.local.get(["apiUrls"], (result) => {
