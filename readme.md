@@ -1,3 +1,5 @@
+Here's the updated `README.md` that includes the new one‑line Windows installer, the current FastAPI server, the Chrome extension, the CLI tool, and all deployment instructions.
+
 ```markdown
 # DID Reputation Checker
 
@@ -8,7 +10,7 @@ A complete toolkit to extract phone numbers from the Peerless Network page, chec
 - **Chrome Extension** – Captures DIDs from the Peerless API, calls the reputation server, displays sortable/filterable results, and auto‑selects checkboxes.
 - **Reputation API Server** – FastAPI‑based REST API that uses an async scraper to look up phone numbers on RoboKiller. Includes SQLite caching, rate limiting, and retries.
 - **CLI Tool** – Command‑line interface for batch processing, with real‑time progress, retry logic, clipboard copy, and CSV/JSON export.
-- **Deployment Scripts** – One‑command installation for Ubuntu (systemd + Nginx) and Windows batch files.
+- **Deployment Scripts** – One‑command installation for Ubuntu (systemd + Nginx) and one‑line PowerShell installer for Windows.
 
 ---
 
@@ -16,7 +18,7 @@ A complete toolkit to extract phone numbers from the Peerless Network page, chec
 
 ### Linux (Ubuntu / Debian)
 
-Run the one‑command installer:
+Run the one‑command installer (as root or with sudo):
 
 ```bash
 curl -sL https://raw.githubusercontent.com/siamakanda/DIDRepChecker/main/scripts/bootstrap.sh | sudo bash
@@ -32,17 +34,24 @@ This will:
 
 After installation, the API is available at `http://<server-ip>/scrape`.
 
-### Windows (Development)
+### Windows (One‑line PowerShell Installer)
 
-From the `server` directory:
+Open **PowerShell as Administrator** and run:
 
-```cmd
-installer_windows.bat
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/siamakanda/DIDRepChecker/main/scripts/install_windows.ps1'))
 ```
 
-Then run:
+This will:
+- Install Git and Python if missing.
+- Clone the repository to `C:\Program Files\DIDReputationAPI`.
+- Create a virtual environment and install Python dependencies.
+- **Does not** start the server automatically – run `run_windows.bat` from the installation folder to start manually.
+
+To start the server manually:
 
 ```cmd
+cd C:\Program Files\DIDReputationAPI
 run_windows.bat
 ```
 
@@ -85,6 +94,7 @@ uvicorn api_server:app --reload
 - **Persistent preferences** (filter, sort, N values).
 - **Row selection** in results table.
 - **Auto‑switch to Results tab** when reputation data arrives.
+- **Selection count message** after selecting on the page.
 
 ---
 
@@ -160,6 +170,7 @@ DIDRepChecker/
 ├── scripts/                # Deployment automation
 │   ├── bootstrap.sh
 │   ├── deploy_linux.sh
+│   ├── install_windows.ps1
 │   └── uninstall.sh
 ├── requirements.txt        # Root dependencies (if any)
 └── README.md
@@ -200,4 +211,10 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 **Enjoy automated DID reputation checking!** 🚀
 ```
 
-This README is up‑to‑date with your FastAPI server, modern extension UI, deployment scripts, and CLI tool. You can place it in the root of your repository.
+This README now includes:
+- The one‑line PowerShell installer for Windows (with a note that the server does not start automatically – user must run `run_windows.bat`).
+- Updated folder structure reflecting the `scripts/install_windows.ps1`.
+- All current features of the extension (auto‑switch to Results, default Positive filter, selection count message, etc.).
+- Consistent command examples for CLI, extension, and server.
+
+You can replace your existing `README.md` with this content.
