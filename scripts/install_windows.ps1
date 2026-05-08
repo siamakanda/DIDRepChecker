@@ -51,27 +51,24 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
-# Create installation directory if it doesn't exist
-if (-not (Test-Path $InstallDir)) {
-    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-}
-
-# Clone or update repository
-Set-Location $InstallDir
-if (Test-Path "$InstallDir\.git") {
-    Write-Host "Repository already exists. Pulling latest changes..." -ForegroundColor Yellow
-    git pull origin $Branch
-} else {
-    # Directory exists but is not a git repo – remove it and clone fresh
-    if (Test-Path $InstallDir) {
-        Write-Host "Removing existing non‑git directory..." -ForegroundColor Yellow
-        Remove-Item -Recurse -Force $InstallDir
+# Handle existing installation
+if (Test-Path $InstallDir) {
+    if (Test-Path "$InstallDir\.git") {
+        Write-Host "Repository already exists. Pulling latest changes..." -ForegroundColor Yellow
+        Set-Location $InstallDir
+        git pull origin $Branch
+    } else {
+        Write-Host "Installation directory already exists (non‑git). Skipping clone." -ForegroundColor Yellow
+        Write-Host "If you want a fresh installation, delete the folder first." -ForegroundColor Yellow
+        Set-Location $InstallDir
     }
+} else {
     Write-Host "Cloning repository into $InstallDir..." -ForegroundColor Yellow
     git clone --branch $Branch $RepoUrl $InstallDir
+    Set-Location $InstallDir
 }
 
-# Create virtual environment
+# Create virtual environment if missing
 $venvDir = "$InstallDir\venv"
 if (-not (Test-Path $venvDir)) {
     Write-Host "Creating virtual environment..." -ForegroundColor Yellow
