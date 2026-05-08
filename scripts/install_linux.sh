@@ -1,11 +1,36 @@
 #!/bin/bash
-# Production deployment for DID Reputation API (Local LAN)
-# Designed to run from the scripts directory (but will work from anywhere)
+# One‑command installer for DID Reputation Checker on Linux
+# Usage: curl -sL https://raw.githubusercontent.com/siamakanda/DIDRepChecker/main/scripts/install_linux.sh | sudo bash
 
 set -e
 
-# Find the project root (parent of scripts directory)
-PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_URL="https://github.com/siamakanda/DIDRepChecker.git"
+REPO_DIR="/opt/DIDRepChecker"
+BRANCH="main"
+
+# Ensure curl and git are available
+if ! command -v curl &> /dev/null; then
+    apt update && apt install -y curl
+fi
+if ! command -v git &> /dev/null; then
+    apt update && apt install -y git
+fi
+
+# Clone or update repository
+if [ -d "$REPO_DIR" ]; then
+    echo "Repository already exists. Pulling latest changes..."
+    cd "$REPO_DIR"
+    git pull origin "$BRANCH"
+else
+    echo "Cloning repository into $REPO_DIR..."
+    git clone --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
+    cd "$REPO_DIR"
+fi
+
+# ----------------------------------------------------------------------
+# Installation (formerly deploy_linux.sh)
+# ----------------------------------------------------------------------
+PROJECT_ROOT="$REPO_DIR"
 APP_DIR="$PROJECT_ROOT"
 VENV_DIR="$APP_DIR/venv"
 SERVICE_NAME="did-api"
@@ -43,7 +68,7 @@ deactivate
 log "Creating systemd service: /etc/systemd/system/$SERVICE_NAME.service"
 cat > /etc/systemd/system/$SERVICE_NAME.service <<EOF
 [Unit]
-Description=Gunicorn instance for FastAPI DID Reputation API
+Description=Gunicorn instance for FastAPI DID Reputation Checker
 After=network.target
 
 [Service]

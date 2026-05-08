@@ -1,5 +1,3 @@
-Here's the updated `README.md` that includes the new one‑line Windows installer, the current FastAPI server, the Chrome extension, the CLI tool, and all deployment instructions.
-
 ```markdown
 # DID Reputation Checker
 
@@ -21,7 +19,7 @@ A complete toolkit to extract phone numbers from the Peerless Network page, chec
 Run the one‑command installer (as root or with sudo):
 
 ```bash
-curl -sL https://raw.githubusercontent.com/siamakanda/DIDRepChecker/main/scripts/bootstrap.sh | sudo bash
+curl -sL https://raw.githubusercontent.com/siamakanda/DIDRepChecker/main/scripts/install_linux.sh | sudo bash
 ```
 
 This will:
@@ -44,14 +42,14 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; [Net.ServicePointManager]::Sec
 
 This will:
 - Install Git and Python if missing.
-- Clone the repository to `C:\Program Files\DIDReputationAPI`.
+- Clone the repository into the **current working directory**.
 - Create a virtual environment and install Python dependencies.
 - **Does not** start the server automatically – run `run_windows.bat` from the installation folder to start manually.
 
 To start the server manually:
 
 ```cmd
-cd C:\Program Files\DIDReputationAPI
+cd <where-you-ran-the-installer>
 run_windows.bat
 ```
 
@@ -155,23 +153,20 @@ DIDRepChecker/
 │   ├── popup.css
 │   └── popup.js
 ├── server/                 # FastAPI backend
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py
-│   │   ├── scraper_engine.py
-│   │   ├── cache.py
-│   │   ├── models.py
-│   │   └── config.py
+│   ├── __init__.py
+│   ├── api_server.py
+│   ├── scraper_engine.py
+│   ├── cache.py
 │   ├── requirements.txt
-│   ├── installer_windows.bat
 │   └── run_windows.bat
 ├── cli_tool/               # Command‑line interface
+│   ├── api_client.py
 │   └── did_cli.py
 ├── scripts/                # Deployment automation
-│   ├── bootstrap.sh
-│   ├── deploy_linux.sh
+│   ├── install_linux.sh
+│   ├── uninstall_linux.sh
 │   ├── install_windows.ps1
-│   └── uninstall.sh
+│   └── uninstall_windows.ps1
 ├── requirements.txt        # Root dependencies (if any)
 └── README.md
 ```
@@ -182,9 +177,9 @@ DIDRepChecker/
 
 - Python 3.9+
 - Chrome browser (for the extension)
-- Dependencies are listed in `server/requirements.txt` and `cli_tool/requirements.txt` (if separated).
+- Dependencies are listed in `server/requirements.txt`.
 
-For the server deployment on Linux, you also need `nginx`, `systemd`, and `git`.
+For server deployment on Linux, you also need `nginx`, `systemd`, and `git`.
 
 ---
 
@@ -210,11 +205,3 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 
 **Enjoy automated DID reputation checking!** 🚀
 ```
-
-This README now includes:
-- The one‑line PowerShell installer for Windows (with a note that the server does not start automatically – user must run `run_windows.bat`).
-- Updated folder structure reflecting the `scripts/install_windows.ps1`.
-- All current features of the extension (auto‑switch to Results, default Positive filter, selection count message, etc.).
-- Consistent command examples for CLI, extension, and server.
-
-You can replace your existing `README.md` with this content.

@@ -1,10 +1,10 @@
 #!/bin/bash
-# Uninstall the DID Reputation API service and remove files
+# Uninstall the DID Reputation Checker service and remove files
 
 set -e
 
 SERVICE_NAME="did-api"
-APP_DIR="/opt/did-reputation-api"
+APP_DIR="/opt/DIDRepChecker"
 
 # Stop and disable service
 systemctl stop $SERVICE_NAME 2>/dev/null || true

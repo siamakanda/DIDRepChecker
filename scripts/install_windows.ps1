@@ -1,16 +1,16 @@
 # install_windows.ps1
-# One‑command installer for DID Reputation API on Windows
-# Installs into the current working directory (where the script is run).
+# One‑command installer for DID Reputation Checker on Windows
+# Installs into %LOCALAPPDATA%\DIDRepChecker
 # Run this script as Administrator (only needed to install Git/Python).
 
 param(
     [string]$RepoUrl = "https://github.com/siamakanda/DIDRepChecker.git",
-    [string]$Branch = "main"
+    [string]$Branch = "main",
+    [string]$InstallDir = "$env:LOCALAPPDATA\DIDRepChecker"
 )
 
-$InstallDir = (Get-Location).Path   # current working directory
 Write-Host "=======================================" -ForegroundColor Cyan
-Write-Host "DID Reputation API Installer for Windows" -ForegroundColor Cyan
+Write-Host "DID Reputation Checker Installer for Windows" -ForegroundColor Cyan
 Write-Host "=======================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Installation directory: $InstallDir" -ForegroundColor Yellow
@@ -47,6 +47,11 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     Remove-Item $pythonInstaller
     # Refresh environment
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+}
+
+# Create installation directory if it doesn't exist
+if (-not (Test-Path $InstallDir)) {
+    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
 
 # Clone or update repository
