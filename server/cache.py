@@ -2,6 +2,7 @@ import time
 import os
 import sys
 import logging
+from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 import aiosqlite
 
@@ -11,30 +12,61 @@ class ReputationCache:
     """Async SQLite cache for RoboKiller reputation results."""
 
     def __init__(self, db_path: str = None, ttl_seconds: int = 86400):
-        if db_path is None:
-            # Use user-writable directory
-            if sys.platform == "win32":
-                appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~\\AppData\\Local"))
-                cache_dir = os.path.join(appdata, "DIDReputationAPI")
-            else:
-                cache_dir = os.path.expanduser("~/.cache/did-reputation-api")
-            os.makedirs(cache_dir, exist_ok=True)
-            self.db_path = os.path.join(cache_dir, "reputation_cache.db")
-        else:
-            self.db_path = db_path
         self.ttl_seconds = ttl_seconds
         self._initialized = False
 
+        if db_path is not None:
+            self.db_path = db_path
+            logger.info(f"Using user-provided cache path: {self.db_path}")
+            return
+
+        # Determine OS-specific cache directory
+        if sys.platform == "win32":
+            base_dir = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+            cache_dir = base_dir / "DIDRepChecker"
+        else:
+            # Linux, macOS, etc.
+            cache_dir = Path.home() / ".cache" / "DIDRepChecker"
+
+        # Ensure the directory exists
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            # Test write access
+            test_file = cache_dir / ".write_test"
+            test_file.touch()
+            test_file.unlink()
+            self.db_path = str(cache_dir / "reputation_cache.db")
+            logger.info(f"Cache database path: {self.db_path}")
+        except Exception as e:
+            logger.warning(f"Cannot write to {cache_dir}: {e}. Falling back to in-memory cache.")
+            self.db_path = ":memory:"
+            logger.info("Using in-memory cache (no persistence across restarts).")
+
     async def _init_db(self):
-        """Initialize the database and create tables if they don't exist."""
+        """Create the database and tables if they don't exist."""
         if self._initialized:
             return
 
-        # Ensure the directory exists (already done in __init__, but safe)
-        db_dir = os.path.dirname(self.db_path)
-        if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir, exist_ok=True)
+        if self.db_path == ":memory:":
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute('''
+                    CREATE TABLE IF NOT EXISTS reputation (
+                        phone_number TEXT PRIMARY KEY,
+                        reputation TEXT,
+                        robokiller_status TEXT,
+                        user_reports TEXT,
+                        total_calls TEXT,
+                        last_call TEXT,
+                        scraped_at TEXT,
+                        timestamp REAL
+                    )
+                ''')
+                await db.commit()
+            self._initialized = True
+            return
 
+        # File-based database
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS reputation (
@@ -52,12 +84,6 @@ class ReputationCache:
         self._initialized = True
 
     async def get_uncached(self, numbers: List[str]) -> Tuple[Dict[str, Dict[str, str]], List[str]]:
-        """
-        Check the cache for a list of numbers.
-        Returns a tuple:
-        - Dict of cached results {phone_number: result_dict}
-        - List of numbers that are missing or expired (need to be scraped)
-        """
         if not numbers:
             return {}, []
 
@@ -68,17 +94,14 @@ class ReputationCache:
 
         try:
             async with aiosqlite.connect(self.db_path) as db:
-                # SQLite max variables is usually 999, so chunk the query if numbers list is huge
                 chunk_size = 900
                 for i in range(0, len(numbers), chunk_size):
                     chunk = numbers[i:i + chunk_size]
                     placeholders = ','.join('?' * len(chunk))
-                    
                     async with db.execute(f"SELECT * FROM reputation WHERE phone_number IN ({placeholders})", chunk) as cursor:
                         async for row in cursor:
                             phone_number = row[0]
                             timestamp = row[7]
-                            
                             if current_time - timestamp <= self.ttl_seconds:
                                 cached_results[phone_number] = {
                                     "phone_number": phone_number,
@@ -89,27 +112,21 @@ class ReputationCache:
                                     "last_call": row[5],
                                     "scraped_at": row[6]
                                 }
-
-            # Identify which numbers are missing or expired
             for num in numbers:
                 if num not in cached_results:
                     numbers_to_scrape.append(num)
-                    
         except Exception as e:
             logger.error(f"Cache read error: {e}")
-            # If cache fails, degrade gracefully and scrape everything
             return {}, numbers
 
         return cached_results, numbers_to_scrape
 
     async def save(self, results: List[Dict[str, str]]):
-        """Save new results to the cache."""
         if not results:
             return
 
         await self._init_db()
         current_time = time.time()
-
         rows = []
         for res in results:
             rows.append((
@@ -135,7 +152,6 @@ class ReputationCache:
             logger.error(f"Cache write error: {e}")
 
     async def cleanup_expired(self):
-        """Remove expired records from the cache."""
         await self._init_db()
         current_time = time.time()
         try:
