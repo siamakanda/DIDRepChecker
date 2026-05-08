@@ -1,9 +1,9 @@
 @echo off
-cd /d "%~dp0.."
+cd /d "%~dp0"
 
 REM Check if virtual environment exists
 if not exist "venv" (
-    echo Virtual environment not found. Please run installer_windows.bat first.
+    echo Virtual environment not found. Please run install_windows.ps1 first.
     pause
     exit /b 1
 )
