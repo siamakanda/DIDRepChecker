@@ -51,7 +51,7 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
-# Handle existing installation
+# Handle existing installation directory
 if (Test-Path $InstallDir) {
     if (Test-Path "$InstallDir\.git") {
         Write-Host "Repository already exists. Pulling latest changes..." -ForegroundColor Yellow
@@ -68,24 +68,36 @@ if (Test-Path $InstallDir) {
     Set-Location $InstallDir
 }
 
-# Create virtual environment if missing
+# Virtual environment handling – remove corrupted venv if needed
 $venvDir = "$InstallDir\venv"
+if (Test-Path $venvDir) {
+    $activateScript = "$venvDir\Scripts\Activate.ps1"
+    if (-not (Test-Path $activateScript)) {
+        Write-Host "Virtual environment is incomplete. Removing it..." -ForegroundColor Yellow
+        Remove-Item -Recurse -Force $venvDir
+    }
+}
+
 if (-not (Test-Path $venvDir)) {
     Write-Host "Creating virtual environment..." -ForegroundColor Yellow
     python -m venv $venvDir
+    if (-not (Test-Path "$venvDir\Scripts\Activate.ps1")) {
+        Write-Host "ERROR: Failed to create virtual environment." -ForegroundColor Red
+        exit 1
+    }
 }
 
 # Activate and install dependencies
 Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
 & "$venvDir\Scripts\Activate.ps1"
-python -m pip install --upgrade pip
+python -m pip install --upgrade pip --quiet
 if (Test-Path "$InstallDir\requirements.txt") {
-    pip install -r "$InstallDir\requirements.txt"
+    pip install -r "$InstallDir\requirements.txt" --quiet
 } else {
     Write-Host "requirements.txt not found. Installing core packages..." -ForegroundColor Yellow
-    pip install fastapi uvicorn aiohttp lxml aiosqlite
+    pip install fastapi uvicorn aiohttp lxml aiosqlite --quiet
 }
-pip install gunicorn uvicorn  # optional, but useful
+pip install gunicorn uvicorn --quiet
 
 Write-Host ""
 Write-Host "Installation complete!" -ForegroundColor Green
