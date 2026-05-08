@@ -58,10 +58,15 @@ if (-not (Test-Path $InstallDir)) {
 
 # Clone or update repository
 Set-Location $InstallDir
-if (Test-Path "$InstallDir\server") {
+if (Test-Path "$InstallDir\.git") {
     Write-Host "Repository already exists. Pulling latest changes..." -ForegroundColor Yellow
     git pull origin $Branch
 } else {
+    # Directory exists but is not a git repo – remove it and clone fresh
+    if (Test-Path $InstallDir) {
+        Write-Host "Removing existing non‑git directory..." -ForegroundColor Yellow
+        Remove-Item -Recurse -Force $InstallDir
+    }
     Write-Host "Cloning repository into $InstallDir..." -ForegroundColor Yellow
     git clone --branch $Branch $RepoUrl $InstallDir
 }
@@ -89,17 +94,28 @@ Write-Host ""
 Write-Host "Installation complete!" -ForegroundColor Green
 Write-Host "API files are located in: $InstallDir"
 Write-Host ""
+
+$runScript = Join-Path $InstallDir "run_windows.bat"
+if (-not (Test-Path $runScript)) {
+    Write-Host "WARNING: run_windows.bat not found in the expected location." -ForegroundColor Yellow
+    Write-Host "You can start the server manually using one of these commands:" -ForegroundColor Cyan
+    Write-Host "  1. cd $InstallDir && python server/api_server.py" -ForegroundColor White
+    Write-Host "  2. cd $InstallDir && uvicorn server.api_server:app --host 0.0.0.0 --port 8000 --reload" -ForegroundColor White
+    Write-Host ""
+    $manual = Read-Host "Do you want to start the server using the first command now? (Y/N)"
+    if ($manual -eq 'Y' -or $manual -eq 'y') {
+        Write-Host "Starting server..." -ForegroundColor Yellow
+        Start-Process -FilePath "python" -ArgumentList "server/api_server.py" -WorkingDirectory $InstallDir -WindowStyle Normal
+        Write-Host "Server started in a new window." -ForegroundColor Green
+    }
+    exit 0
+}
+
 $startNow = Read-Host "Do you want to start the server now? (Y/N)"
 if ($startNow -eq 'Y' -or $startNow -eq 'y') {
-    $runScript = Join-Path $InstallDir "run_windows.bat"
-    if (Test-Path $runScript) {
-        Write-Host "Starting server in a new window..." -ForegroundColor Yellow
-        Start-Process -FilePath $runScript -WindowStyle Normal -WorkingDirectory $InstallDir
-        Write-Host "Server window opened. You can close it to stop the server." -ForegroundColor Green
-    } else {
-        Write-Host "ERROR: Could not find $runScript. Starting server manually." -ForegroundColor Red
-        Write-Host "Please run: $InstallDir\run_windows.bat" -ForegroundColor Cyan
-    }
+    Write-Host "Starting server in a new window..." -ForegroundColor Yellow
+    Start-Process -FilePath $runScript -WindowStyle Normal -WorkingDirectory $InstallDir
+    Write-Host "Server window opened. You can close it to stop the server." -ForegroundColor Green
 } else {
     Write-Host "To start the server manually, run: $InstallDir\run_windows.bat" -ForegroundColor Cyan
 }
