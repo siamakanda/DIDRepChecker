@@ -1,13 +1,15 @@
 # install_windows.ps1
 # One‑command installer for DID Reputation Checker on Windows
-# Installs into %LOCALAPPDATA%\DIDRepChecker
+# Installs into %LOCALAPPDATA%\DIDRepChecker (per‑user, writable)
 # Run this script as Administrator (only needed to install Git/Python).
 
 param(
     [string]$RepoUrl = "https://github.com/siamakanda/DIDRepChecker.git",
-    [string]$Branch = "main",
-    [string]$InstallDir = "$env:LOCALAPPDATA\DIDRepChecker"
+    [string]$Branch = "main"
 )
+
+# Fixed installation directory – never use current directory
+$InstallDir = "$env:LOCALAPPDATA\DIDRepChecker"
 
 Write-Host "=======================================" -ForegroundColor Cyan
 Write-Host "DID Reputation Checker Installer for Windows" -ForegroundColor Cyan
@@ -55,14 +57,13 @@ if (-not (Test-Path $InstallDir)) {
 }
 
 # Clone or update repository
+Set-Location $InstallDir
 if (Test-Path "$InstallDir\server") {
     Write-Host "Repository already exists. Pulling latest changes..." -ForegroundColor Yellow
-    Set-Location $InstallDir
     git pull origin $Branch
 } else {
     Write-Host "Cloning repository into $InstallDir..." -ForegroundColor Yellow
     git clone --branch $Branch $RepoUrl $InstallDir
-    Set-Location $InstallDir
 }
 
 # Create virtual environment
