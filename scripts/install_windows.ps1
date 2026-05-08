@@ -88,6 +88,13 @@ pip install gunicorn uvicorn  # optional, but useful
 Write-Host ""
 Write-Host "Installation complete!" -ForegroundColor Green
 Write-Host "API files are located in: $InstallDir"
-Write-Host "To start the server manually, run: $InstallDir\run_windows.bat"
 Write-Host ""
-Write-Host "Note: The server does NOT start automatically on boot."
+$startNow = Read-Host "Do you want to start the server now? (Y/N)"
+if ($startNow -eq 'Y' -or $startNow -eq 'y') {
+    Write-Host "Starting server in a new window..." -ForegroundColor Yellow
+    Start-Process -FilePath "$InstallDir\run_windows.bat" -WindowStyle Normal
+    Write-Host "Server window opened. You can close it to stop the server." -ForegroundColor Green
+} else {
+    Write-Host "To start the server manually, run: $InstallDir\run_windows.bat" -ForegroundColor Cyan
+}
+Write-Host ""
