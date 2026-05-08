@@ -91,9 +91,15 @@ Write-Host "API files are located in: $InstallDir"
 Write-Host ""
 $startNow = Read-Host "Do you want to start the server now? (Y/N)"
 if ($startNow -eq 'Y' -or $startNow -eq 'y') {
-    Write-Host "Starting server in a new window..." -ForegroundColor Yellow
-    Start-Process -FilePath "$InstallDir\run_windows.bat" -WindowStyle Normal
-    Write-Host "Server window opened. You can close it to stop the server." -ForegroundColor Green
+    $runScript = Join-Path $InstallDir "run_windows.bat"
+    if (Test-Path $runScript) {
+        Write-Host "Starting server in a new window..." -ForegroundColor Yellow
+        Start-Process -FilePath $runScript -WindowStyle Normal -WorkingDirectory $InstallDir
+        Write-Host "Server window opened. You can close it to stop the server." -ForegroundColor Green
+    } else {
+        Write-Host "ERROR: Could not find $runScript. Starting server manually." -ForegroundColor Red
+        Write-Host "Please run: $InstallDir\run_windows.bat" -ForegroundColor Cyan
+    }
 } else {
     Write-Host "To start the server manually, run: $InstallDir\run_windows.bat" -ForegroundColor Cyan
 }
