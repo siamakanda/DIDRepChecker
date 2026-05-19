@@ -20,15 +20,20 @@ class ReputationCache:
             logger.info(f"Using user-provided cache path: {self.db_path}")
             return
 
-        # Determine OS-specific cache directory
-        if sys.platform == "win32":
-            base_dir = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-            cache_dir = base_dir / "DIDRepChecker"
+        # Use environment variable if set
+        env_cache_dir = os.environ.get("REPUTATION_CACHE_DIR")
+        if env_cache_dir:
+            cache_dir = Path(env_cache_dir)
         else:
-            # Linux, macOS, etc.
-            cache_dir = Path.home() / ".cache" / "DIDRepChecker"
+            # Determine OS-specific default
+            if sys.platform == "win32":
+                base_dir = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+                cache_dir = base_dir / "DIDRepChecker"
+            else:
+                # Linux/macOS production default
+                cache_dir = Path("/var/cache/DIDRepChecker")
 
-        # Ensure the directory exists
+        # Ensure the directory exists and is writable
         try:
             cache_dir.mkdir(parents=True, exist_ok=True)
             # Test write access

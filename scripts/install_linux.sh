@@ -1,71 +1,85 @@
 #!/bin/bash
-# One‑command installer for DID Reputation Checker on Linux
+# Production installer for DID Reputation Checker on Debian/Ubuntu
 # Usage: curl -sL https://raw.githubusercontent.com/siamakanda/DIDRepChecker/main/scripts/install_linux.sh | sudo bash
+#   or: export DIDREP_INSTALL_DIR=/custom/path && curl ... | sudo bash
 
 set -e
+LOGFILE="/var/log/did-reputation-install.log"
+exec > >(tee -a "$LOGFILE") 2>&1
+
+echo "[$(date)] Starting installation"
+
+# Trap errors to rollback
+cleanup() {
+    echo "[ERROR] Installation failed. Rolling back..."
+    systemctl stop did-api 2>/dev/null || true
+    systemctl disable did-api 2>/dev/null || true
+    rm -f /etc/systemd/system/did-api.service
+    rm -f /etc/nginx/sites-available/did-api
+    rm -f /etc/nginx/sites-enabled/did-api
+    systemctl reload nginx 2>/dev/null || true
+    [ -d "$REPO_DIR" ] && rm -rf "$REPO_DIR"
+    echo "Rollback complete. Check $LOGFILE for details."
+    exit 1
+}
+trap cleanup ERR
 
 REPO_URL="https://github.com/siamakanda/DIDRepChecker.git"
-REPO_DIR="/opt/DIDRepChecker"
 BRANCH="main"
+SERVICE_NAME="did-api"
+CACHE_DIR="/var/cache/DIDRepChecker"
 
-# Ensure curl and git are available
-if ! command -v curl &> /dev/null; then
-    apt update && apt install -y curl
+# Allow custom installation directory via environment variable
+if [ -n "$DIDREP_INSTALL_DIR" ]; then
+    REPO_DIR="$DIDREP_INSTALL_DIR"
+else
+    REPO_DIR="/opt/DIDRepChecker"
 fi
-if ! command -v git &> /dev/null; then
-    apt update && apt install -y git
+
+SOCKET_PATH="$REPO_DIR/$SERVICE_NAME.sock"
+VENV_DIR="$REPO_DIR/venv"
+
+echo "Installation directory: $REPO_DIR"
+echo "Cache directory: $CACHE_DIR"
+
+# Ensure Debian/Ubuntu
+if ! command -v apt &> /dev/null; then
+    echo "This script requires apt (Debian/Ubuntu). Exiting."
+    exit 1
 fi
+
+# System dependencies
+apt update && apt upgrade -y
+apt install -y python3 python3-pip python3-venv nginx curl git
 
 # Clone or update repository
-if [ -d "$REPO_DIR" ]; then
-    echo "Repository already exists. Pulling latest changes..."
+if [ -d "$REPO_DIR/.git" ]; then
     cd "$REPO_DIR"
-    git pull origin "$BRANCH"
+    git fetch origin
+    git reset --hard "origin/$BRANCH"
 else
-    echo "Cloning repository into $REPO_DIR..."
+    rm -rf "$REPO_DIR" 2>/dev/null || true
     git clone --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
     cd "$REPO_DIR"
 fi
 
-# ----------------------------------------------------------------------
-# Installation (formerly deploy_linux.sh)
-# ----------------------------------------------------------------------
-PROJECT_ROOT="$REPO_DIR"
-APP_DIR="$PROJECT_ROOT"
-VENV_DIR="$APP_DIR/venv"
-SERVICE_NAME="did-api"
-SOCKET_PATH="$APP_DIR/$SERVICE_NAME.sock"
-
-log() {
-    echo -e "\n[$(date +'%Y-%m-%d %H:%M:%S')] $1"
-}
-
-# 1. System dependencies
-log "Updating system packages..."
-apt update && apt upgrade -y
-
-log "Installing required packages..."
-apt install -y python3 python3-pip python3-venv nginx curl
-
-# 2. Python virtual environment
-if [ ! -d "$VENV_DIR" ]; then
-    log "Creating virtual environment..."
-    python3 -m venv "$VENV_DIR"
-fi
-
-log "Installing Python dependencies..."
+# Python virtual environment
+python3 -m venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 pip install --upgrade pip
-if [ -f "$PROJECT_ROOT/requirements.txt" ]; then
-    pip install -r "$PROJECT_ROOT/requirements.txt"
+if [ -f "$REPO_DIR/requirements.txt" ]; then
+    pip install -r "$REPO_DIR/requirements.txt"
 else
-    log "⚠️ requirements.txt not found in $PROJECT_ROOT. Skipping."
+    pip install fastapi uvicorn aiohttp lxml aiosqlite
 fi
 pip install gunicorn uvicorn
 deactivate
 
-# 3. Create systemd service (Gunicorn with Uvicorn workers)
-log "Creating systemd service: /etc/systemd/system/$SERVICE_NAME.service"
+# Create cache directory owned by www-data
+mkdir -p "$CACHE_DIR"
+chown www-data:www-data "$CACHE_DIR"
+
+# Create systemd service
 cat > /etc/systemd/system/$SERVICE_NAME.service <<EOF
 [Unit]
 Description=Gunicorn instance for FastAPI DID Reputation Checker
@@ -74,20 +88,19 @@ After=network.target
 [Service]
 User=www-data
 Group=www-data
-WorkingDirectory=$APP_DIR
+WorkingDirectory=$REPO_DIR
 Environment="PATH=$VENV_DIR/bin"
-Environment="PYTHONPATH=$APP_DIR"
+Environment="PYTHONPATH=$REPO_DIR"
+Environment="REPUTATION_CACHE_DIR=$CACHE_DIR"
 ExecStart=$VENV_DIR/bin/gunicorn -k uvicorn.workers.UvicornWorker --workers 4 --bind unix:$SOCKET_PATH server.api_server:app
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# 4. Configure Nginx reverse proxy
-log "Configuring Nginx..."
+# Configure Nginx
 SERVER_IP=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -1)
 [ -z "$SERVER_IP" ] && SERVER_IP="localhost"
-log "Server IP detected as: $SERVER_IP"
 
 cat > /etc/nginx/sites-available/$SERVICE_NAME <<EOF
 server {
@@ -102,38 +115,28 @@ server {
 }
 EOF
 
-# Enable site and remove default
+# Enable site (backup default if exists)
+if [ -f /etc/nginx/sites-enabled/default ]; then
+    mv /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/default.backup
+fi
 ln -sf /etc/nginx/sites-available/$SERVICE_NAME /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
 
 nginx -t
-
-# 5. Fix permissions for socket directory
-log "Setting directory permissions for Nginx access..."
-chown -R www-data:www-data "$APP_DIR"
-chmod 755 "$APP_DIR"
-chmod 755 "$PROJECT_ROOT"
-
-# 6. Start services
 systemctl daemon-reload
 systemctl enable $SERVICE_NAME
 systemctl restart $SERVICE_NAME
 systemctl restart nginx
 
-# 7. Health check
+# Health check
 sleep 3
 if systemctl is-active --quiet $SERVICE_NAME; then
-    log "✅ $SERVICE_NAME service is running."
+    echo "✅ Service $SERVICE_NAME is running."
 else
-    log "❌ $SERVICE_NAME service failed to start. Check logs: sudo journalctl -u $SERVICE_NAME"
+    echo "❌ Service failed to start. Check journalctl -u $SERVICE_NAME"
+    exit 1
 fi
 
-if systemctl is-active --quiet nginx; then
-    log "✅ Nginx is running."
-else
-    log "❌ Nginx failed to start. Check configuration: sudo nginx -t"
-fi
-
-log "Deployment complete!"
-log "API is accessible at http://$SERVER_IP/scrape"
-log "Interactive API docs at http://$SERVER_IP/docs"
+echo "Deployment complete!"
+echo "API accessible at http://$SERVER_IP/scrape"
+echo "Cache directory: $CACHE_DIR"
+echo "Logs: $LOGFILE"
