@@ -9,31 +9,39 @@ import aiosqlite
 logger = logging.getLogger(__name__)
 
 class ReputationCache:
-    """Async SQLite cache for RoboKiller reputation results."""
+    """Async SQLite cache for RoboKiller reputation results with configurable TTL in days."""
 
-    def __init__(self, db_path: str = None, ttl_seconds: int = 86400):
-        self.ttl_seconds = ttl_seconds
+    def __init__(self, db_path: str = None, ttl_days: int = None):
+        # Determine TTL in seconds from environment or default
+        if ttl_days is None:
+            env_days = os.environ.get("REPUTATION_CACHE_DAYS")
+            if env_days:
+                try:
+                    ttl_days = int(env_days)
+                except ValueError:
+                    ttl_days = 3
+            else:
+                ttl_days = 3
+        self.ttl_seconds = ttl_days * 86400
         self._initialized = False
+        logger.info(f"Cache TTL set to {ttl_days} days ({self.ttl_seconds} seconds)")
 
         if db_path is not None:
             self.db_path = db_path
             logger.info(f"Using user-provided cache path: {self.db_path}")
             return
 
-        # Use environment variable if set
+        # Use environment variable for cache directory if set
         env_cache_dir = os.environ.get("REPUTATION_CACHE_DIR")
         if env_cache_dir:
             cache_dir = Path(env_cache_dir)
         else:
-            # Determine OS-specific default
             if sys.platform == "win32":
                 base_dir = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
                 cache_dir = base_dir / "DIDRepChecker"
             else:
-                # Linux/macOS production default
                 cache_dir = Path("/var/cache/DIDRepChecker")
 
-        # Ensure the directory exists and is writable
         try:
             cache_dir.mkdir(parents=True, exist_ok=True)
             # Test write access

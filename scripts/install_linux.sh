@@ -46,7 +46,7 @@ echo "Cache directory: $CACHE_DIR"
 if ! command -v apt &> /dev/null; then
     echo "This script requires apt (Debian/Ubuntu). Exiting."
     exit 1
-fi
+}
 
 # System dependencies
 apt update && apt upgrade -y
@@ -63,6 +63,19 @@ else
     cd "$REPO_DIR"
 fi
 
+# Create default .env configuration file
+cat > "$REPO_DIR/.env" <<EOF
+# DID Reputation Checker Configuration
+# Edit this file to change settings, then restart the service.
+
+# Cache directory (must be writable by www-data)
+REPUTATION_CACHE_DIR=$CACHE_DIR
+
+# How many days to keep reputation data in cache (default: 3)
+REPUTATION_CACHE_DAYS=3
+EOF
+chown www-data:www-data "$REPO_DIR/.env"
+
 # Python virtual environment
 python3 -m venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
@@ -70,7 +83,7 @@ pip install --upgrade pip
 if [ -f "$REPO_DIR/requirements.txt" ]; then
     pip install -r "$REPO_DIR/requirements.txt"
 else
-    pip install fastapi uvicorn aiohttp lxml aiosqlite
+    pip install fastapi uvicorn aiohttp lxml aiosqlite python-dotenv
 fi
 pip install gunicorn uvicorn
 deactivate
@@ -79,7 +92,7 @@ deactivate
 mkdir -p "$CACHE_DIR"
 chown www-data:www-data "$CACHE_DIR"
 
-# Create systemd service
+# Create systemd service (no hardcoded cache days – uses .env)
 cat > /etc/systemd/system/$SERVICE_NAME.service <<EOF
 [Unit]
 Description=Gunicorn instance for FastAPI DID Reputation Checker
@@ -91,7 +104,6 @@ Group=www-data
 WorkingDirectory=$REPO_DIR
 Environment="PATH=$VENV_DIR/bin"
 Environment="PYTHONPATH=$REPO_DIR"
-Environment="REPUTATION_CACHE_DIR=$CACHE_DIR"
 ExecStart=$VENV_DIR/bin/gunicorn -k uvicorn.workers.UvicornWorker --workers 4 --bind unix:$SOCKET_PATH server.api_server:app
 
 [Install]
@@ -139,4 +151,5 @@ fi
 echo "Deployment complete!"
 echo "API accessible at http://$SERVER_IP/scrape"
 echo "Cache directory: $CACHE_DIR"
+echo "Configuration file: $REPO_DIR/.env"
 echo "Logs: $LOGFILE"

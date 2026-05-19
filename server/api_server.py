@@ -3,6 +3,9 @@ FastAPI server for DID Reputation Checker
 Provides a /scrape endpoint that returns reputation data for a list of phone numbers.
 """
 
+from dotenv import load_dotenv
+load_dotenv()  # Loads .env from current working directory
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
