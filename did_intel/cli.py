@@ -30,9 +30,7 @@ try:
 except ImportError:
     CLIPBOARD_AVAILABLE = False
 
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from server.scraper_engine import RoboKillerScraper, clean_number
+from did_intel.scraper import RoboKillerScraper, clean_number
 
 VERSION = "1.0.0"
 console = Console()

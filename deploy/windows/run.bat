@@ -1,9 +1,10 @@
 @echo off
-cd /d "%~dp0"
+REM Run from the project root (parent of deploy/windows)
+cd /d "%~dp0..\.."
 
 REM Check if virtual environment exists
 if not exist "venv" (
-    echo Virtual environment not found. Please run install_windows.ps1 first.
+    echo Virtual environment not found. Please run deploy\windows\install.ps1 first.
     pause
     exit /b 1
 )
@@ -17,12 +18,16 @@ if errorlevel 1 (
 )
 
 echo.
+echo =======================================
+echo   DID Intel API Server
+echo =======================================
+echo.
 echo Starting FastAPI server on http://localhost:8000
 echo API docs available at http://localhost:8000/docs
 echo Press Ctrl+C to stop the server.
 echo.
 
-REM Run Uvicorn (reload enabled for development)
-uvicorn server.api_server:app --host 0.0.0.0 --port 8000 --reload
+REM Run Uvicorn in production mode (no --reload)
+uvicorn did_intel.api:app --host 0.0.0.0 --port 8000
 
 pause

@@ -87,9 +87,12 @@ def parse_numbers(input_source: str, input_file: Optional[str]) -> List[str]:
 # ----------------------------------------------------------------------
 # API client
 # ----------------------------------------------------------------------
-def call_api(api_url: str, numbers: List[str]) -> Optional[List[Dict]]:
-    """Send numbers to API and return results."""
+def call_api(api_url: str, numbers: List[str], api_key: Optional[str] = None) -> Optional[List[Dict]]:
+    """Send numbers to API and return results. Optionally includes X-API-Key header."""
     payload = {"numbers": numbers}
+    headers = {}
+    if api_key:
+        headers["X-API-Key"] = api_key
     try:
         with Progress(
             SpinnerColumn(),
@@ -98,7 +101,7 @@ def call_api(api_url: str, numbers: List[str]) -> Optional[List[Dict]]:
             disable=not RICH_AVAILABLE,
         ) as progress:
             task = progress.add_task("[cyan]Sending request...", total=None)
-            response = requests.post(api_url, json=payload, timeout=60)
+            response = requests.post(api_url, json=payload, headers=headers, timeout=60)
             progress.update(task, completed=True)
         response.raise_for_status()
         return response.json()
@@ -110,7 +113,11 @@ def call_api(api_url: str, numbers: List[str]) -> Optional[List[Dict]]:
         return None
     except requests.exceptions.HTTPError as e:
         print(f"HTTP error: {e}")
-        if response.status_code == 400:
+        if response.status_code == 401:
+            print("Authentication required. Provide an API key with --api-key.")
+        elif response.status_code == 403:
+            print("Invalid API key. Check your key and try again.")
+        elif response.status_code == 400:
             print("Invalid request. Check your numbers.")
         elif response.status_code == 500:
             print("Server error. Check API logs.")
@@ -174,10 +181,11 @@ def display_results(results: List[Dict]):
 # Main
 # ----------------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="Client for DID Reputation API")
+    parser = argparse.ArgumentParser(description="Client for DID Intel Reputation API")
     parser.add_argument("-n", "--numbers", help="Phone numbers (comma/space separated)")
     parser.add_argument("-f", "--file", help="Input file (CSV or text)")
     parser.add_argument("-u", "--url", default="http://localhost:8000/scrape", help="API endpoint URL")
+    parser.add_argument("-k", "--api-key", help="API key for authentication (X-API-Key header)")
     parser.add_argument("--json", action="store_true", help="Output raw JSON instead of formatted table")
     args = parser.parse_args()
 
@@ -187,7 +195,7 @@ def main():
         sys.exit(1)
 
     print(f"Sending {len(numbers)} number(s) to {args.url}...")
-    results = call_api(args.url, numbers)
+    results = call_api(args.url, numbers, api_key=args.api_key)
     if results is None:
         sys.exit(1)
 

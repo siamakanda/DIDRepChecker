@@ -1,19 +1,25 @@
-# install_windows.ps1
-# One‑command installer for DID Reputation Checker on Windows
-# Installs into %LOCALAPPDATA%\DIDRepChecker
+# install.ps1
+# DID Intel — One-command Windows installer
+#
+# Usage (PowerShell as Administrator):
+#   Set-ExecutionPolicy Bypass -Scope Process -Force
+#   iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/siamakanda/DIDRepChecker/main/deploy/windows/install.ps1'))
+#
+# Installs into %LOCALAPPDATA%\did-intel
 
 param(
-    [string]$RepoUrl = "https://github.com/siamakanda/DIDRepChecker.git",   # fixed URL
+    [string]$RepoUrl = "https://github.com/siamakanda/DIDRepChecker.git",
     [string]$Branch = "main"
 )
 
-$InstallDir = "$env:LOCALAPPDATA\DIDRepChecker"
+$InstallDir = "$env:LOCALAPPDATA\did-intel"
 
+Write-Host ""
 Write-Host "=======================================" -ForegroundColor Cyan
-Write-Host "DID Reputation Checker Installer for Windows" -ForegroundColor Cyan
+Write-Host "  DID Intel — Windows Installer" -ForegroundColor Cyan
 Write-Host "=======================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Installation directory: $InstallDir" -ForegroundColor Yellow
+Write-Host "  Install directory : $InstallDir" -ForegroundColor Yellow
 Write-Host ""
 
 # --- Check Python version (requires 3.9+) ---
@@ -112,31 +118,39 @@ if (-not (Test-Path $configFile)) {
     Write-Host "Creating default config.json..." -ForegroundColor Yellow
     @"
 {
-    "cache_ttl_days": 3
+    "cache_ttl_days": 3,
+    "concurrent_requests": 30,
+    "requests_per_second": 5,
+    "api_host": "0.0.0.0",
+    "api_port": 8000
 }
 "@ | Out-File -Encoding utf8 -FilePath $configFile
 }
 
 Write-Host ""
-Write-Host "Installation complete!" -ForegroundColor Green
-Write-Host "API files are located in: $InstallDir"
-Write-Host "Configuration file: $configFile"
+Write-Host "=======================================" -ForegroundColor Green
+Write-Host "  DID Intel installation complete!"
+Write-Host "=======================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "  Install location : $InstallDir"
+Write-Host "  Config file      : $configFile"
 Write-Host ""
 
 # --- Prompt to start the server ---
-$runScript = Join-Path $InstallDir "run_windows.bat"
-if (-not (Test-Path $runScript)) {
-    Write-Host "WARNING: run_windows.bat not found." -ForegroundColor Yellow
-    Write-Host "You can start the server manually: cd $InstallDir && python server/api_server.py" -ForegroundColor Cyan
-    exit 0
-}
-
-$startNow = Read-Host "Do you want to start the server now? (Y/N)"
-if ($startNow -eq 'Y' -or $startNow -eq 'y') {
-    Write-Host "Starting server in a new window..." -ForegroundColor Yellow
-    Start-Process -FilePath $runScript -WindowStyle Normal -WorkingDirectory $InstallDir
-    Write-Host "Server window opened. You can close it to stop the server." -ForegroundColor Green
+$runScript = Join-Path $InstallDir "deploy\windows\run.bat"
+if (Test-Path $runScript) {
+    $startNow = Read-Host "Do you want to start the server now? (Y/N)"
+    if ($startNow -eq 'Y' -or $startNow -eq 'y') {
+        Write-Host "Starting server in a new window..." -ForegroundColor Yellow
+        Start-Process -FilePath $runScript -WindowStyle Normal -WorkingDirectory $InstallDir
+        Write-Host "Server window opened. You can close it to stop the server." -ForegroundColor Green
+    } else {
+        Write-Host "To start the server later: $runScript" -ForegroundColor Cyan
+    }
 } else {
-    Write-Host "To start the server manually, run: $InstallDir\run_windows.bat" -ForegroundColor Cyan
+    Write-Host "To start the server manually:" -ForegroundColor Cyan
+    Write-Host "  cd $InstallDir" -ForegroundColor Cyan
+    Write-Host "  .\venv\Scripts\activate" -ForegroundColor Cyan
+    Write-Host "  uvicorn did_intel.api:app --host 0.0.0.0 --port 8000" -ForegroundColor Cyan
 }
 Write-Host ""

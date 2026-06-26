@@ -28,6 +28,7 @@
     <div id="pasteBox" style="display: none;">
       <textarea id="pasteNumbersTextarea" rows="3" placeholder="Enter phone numbers (one per line, comma, space)"></textarea>
       <div class="paste-buttons">
+        <span id="pasteCount" class="paste-count">0 numbers detected</span>
         <button id="usePastedNumbersBtn" class="success">Use Pasted</button>
         <button id="cancelPasteBtn" class="secondary">Cancel</button>
       </div>
@@ -35,9 +36,14 @@
     <button id="resetToCapturedBtn" class="secondary" style="display: none;">↻ Reset to Captured</button>
   </div>
 
+  <!-- Search -->
+  <div class="search-wrap">
+    <input type="text" id="numberSearch" placeholder="🔍 Filter numbers...">
+  </div>
+
   <!-- Number List -->
   <div class="list-header">
-    <span>Available Numbers</span>
+    <span>Available Numbers <span id="numberCountLabel" class="count-badge">0</span></span>
     <div>
       <button id="selectAllBtn" class="secondary tiny">Check All</button>
       <button id="deselectAllBtn" class="secondary tiny">Uncheck All</button>
@@ -124,6 +130,13 @@
     <button id="addApiUrlBtn">➕ Add</button>
   </div>
   <div id="apiStatus" class="status"></div>
+  <hr>
+  <div class="section-title">🔑 API Key</div>
+  <div class="add-endpoint">
+    <input type="password" id="apiKeyInput" placeholder="Enter API key (leave blank if not required)">
+    <button id="saveApiKeyBtn" class="secondary tiny">💾 Save</button>
+  </div>
+  <div id="apiKeyStatus" class="status"></div>
   <hr>
   <div class="settings-row">
     <button id="clearStorageBtn" class="secondary">🗑️ Clear Stored Results</button>

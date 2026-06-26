@@ -35,6 +35,11 @@ const usePastedNumbersBtn = document.getElementById("usePastedNumbersBtn");
 const cancelPasteBtn = document.getElementById("cancelPasteBtn");
 const resetToCapturedBtn = document.getElementById("resetToCapturedBtn");
 
+// API Key elements
+const apiKeyInput = document.getElementById("apiKeyInput");
+const saveApiKeyBtn = document.getElementById("saveApiKeyBtn");
+const apiKeyStatus = document.getElementById("apiKeyStatus");
+
 function setApiStatusText(text) {
     apiStatus.innerText = text;
     const pt = document.getElementById("progressText");
@@ -139,7 +144,19 @@ function showProgress(show) {
 function updateStats() {
     document.getElementById("statCaptured").innerText = capturedNumbers.length;
     document.getElementById("statSent").innerText = lastSentCount;
-    document.getElementById("statResults").innerText = apiResults.length;
+
+    // Color-coded: total with positive(green) / negative(red) breakdown
+    var pos = 0, neg = 0;
+    for (var i = 0; i < apiResults.length; i++) {
+        if (apiResults[i].reputation === "Positive") pos++;
+        else if (apiResults[i].reputation === "Negative") neg++;
+    }
+    var statResults = document.getElementById("statResults");
+    if (pos + neg > 0) {
+        statResults.innerHTML = apiResults.length + ' <span style="font-size:11px;color:var(--success)">' + pos + '</span> <span style="font-size:11px;color:var(--danger)">' + neg + '</span>';
+    } else {
+        statResults.innerText = apiResults.length;
+    }
     document.getElementById("statSelectedOnPage").innerText = lastSelectedCount;
 }
 
@@ -185,17 +202,23 @@ async function loadCapturedNumbers() {
 
 function renderNumberList() {
     selectedNumbersToSend = [...capturedNumbers];
-    let html = "";
-    capturedNumbers.forEach(num => {
-        html += `<div class="number-item">
-            <input type="checkbox" class="num-checkbox" value="${num}" checked> <span>${num}</span>
-        </div>`;
+    var searchText = (document.getElementById("numberSearch")?.value || "").trim().toLowerCase();
+    var filtered = searchText ? capturedNumbers.filter(function(n) { return n.indexOf(searchText) >= 0; }) : capturedNumbers;
+    var html = "";
+    filtered.forEach(function(num) {
+        html += '<div class="number-item"><input type="checkbox" class="num-checkbox" value="' + num + '" checked> <span>' + num + '</span></div>';
     });
-    numbersContainer.innerHTML = html;
-    document.querySelectorAll('.num-checkbox').forEach(cb => {
+    numbersContainer.innerHTML = html || '<div class="empty-state">No numbers match your search</div>';
+    document.querySelectorAll('.num-checkbox').forEach(function(cb) {
         cb.addEventListener('change', updateSelectedNumbers);
     });
     updateStats();
+    updateNumberCount();
+}
+
+function updateNumberCount() {
+    var label = document.getElementById("numberCountLabel");
+    if (label) label.textContent = capturedNumbers.length;
 }
 
 function updateSelectedNumbers() {
@@ -287,7 +310,7 @@ function renderResultsTable() {
         cb.dataset.number = res.phone_number;
         cbCell.appendChild(cb);
         row.insertCell(1).innerText = res.phone_number;
-        row.insertCell(2).innerText = res.reputation;
+        row.insertCell(2).innerHTML = getReputationBadge(res.reputation);
         row.insertCell(3).innerText = res.robokiller_status || "";
         row.insertCell(4).innerText = res.total_calls || "0";
         row.insertCell(5).innerText = res.user_reports || "0";
@@ -452,6 +475,22 @@ resetToCapturedBtn.addEventListener("click", async () => {
     chrome.storage.local.set({ capturedNumbers: capturedNumbers });
 });
 
+// Live paste counter
+var pasteTextarea = document.getElementById("pasteNumbersTextarea");
+if (pasteTextarea) {
+    pasteTextarea.addEventListener("input", function() {
+        var count = parsePastedNumbers(pasteTextarea.value).length;
+        var pc = document.getElementById("pasteCount");
+        if (pc) pc.textContent = count + " numbers detected";
+    });
+}
+
+// Search filter
+var searchInput = document.getElementById("numberSearch");
+if (searchInput) {
+    searchInput.addEventListener("input", function() { renderNumberList(); });
+}
+
 // ---------- Event Listeners ----------
 sendSelectedBtn.addEventListener("click", () => callReputationApi(selectedNumbersToSend, "selected numbers"));
 sendTopPageBtn.addEventListener("click", () => {
@@ -481,11 +520,15 @@ sortSelect.addEventListener("change", () => {
 });
 sortAscBtn.addEventListener("click", () => {
     currentSortAsc = true;
+    sortAscBtn.classList.add("sort-active");
+    sortDescBtn.classList.remove("sort-active");
     savePreferences();
     renderResultsTable();
 });
 sortDescBtn.addEventListener("click", () => {
     currentSortAsc = false;
+    sortDescBtn.classList.add("sort-active");
+    sortAscBtn.classList.remove("sort-active");
     savePreferences();
     renderResultsTable();
 });
@@ -540,6 +583,20 @@ addApiUrlBtn.addEventListener("click", async () => {
         apiStatus.innerText = "URL already exists.";
     }
 });
+
+// API Key save
+if (saveApiKeyBtn) {
+    saveApiKeyBtn.addEventListener("click", async () => {
+        const key = apiKeyInput ? apiKeyInput.value.trim() : "";
+        await chrome.runtime.sendMessage({ action: "saveApiKey", key: key });
+        if (apiKeyStatus) {
+            apiKeyStatus.innerText = key ? "✅ API key saved." : "✅ API key cleared (auth disabled).";
+            apiKeyStatus.style.color = "var(--success)";
+            setTimeout(() => { if (apiKeyStatus) apiKeyStatus.innerText = ""; }, 3000);
+        }
+    });
+}
+
 clearStorageBtn.addEventListener("click", async () => {
     await chrome.runtime.sendMessage({ action: "clearStoredData" });
     apiResults = [];
@@ -634,8 +691,18 @@ if (darkModeToggle) {
     });
 }
 
+// API Key — load saved key into input field
+chrome.runtime.sendMessage({ action: "getApiKey" }, (response) => {
+    if (response && response.key && apiKeyInput) {
+        apiKeyInput.value = response.key;
+    }
+});
+
 // Initial loads
 loadPreferences();
+// Highlight default sort button
+if (sortAscBtn && currentSortAsc) sortAscBtn.classList.add("sort-active");
+if (sortDescBtn && !currentSortAsc) sortDescBtn.classList.add("sort-active");
 loadCapturedNumbers();
 loadApiUrls();
 chrome.runtime.sendMessage({ action: "getApiResults" }, (response) => {
@@ -674,3 +741,87 @@ if (retryErrorsBtn) {
         chrome.runtime.sendMessage({ action: "startReputationCheck", numbers: failedNumbers, append: true });
     });
 }
+
+// ─── NEW: Reputation badge helper ───────────────────────────────────
+function getReputationBadge(rep) {
+    if (rep === "Positive") return '<span class="badge badge-positive">Positive</span>';
+    if (rep === "Negative") return '<span class="badge badge-negative">Negative</span>';
+    if (rep && (rep.includes("Block") || rep.includes("Error") || rep.includes("HTTP") || rep.includes("Timeout")))
+        return '<span class="badge badge-error">' + rep + '</span>';
+    return '<span class="badge badge-neutral">' + (rep || "Unknown") + '</span>';
+}
+
+// ─── NEW: Toast notifications ──────────────────────────────────────
+function showToast(msg, type) {
+    var container = document.getElementById("toastContainer");
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "toastContainer";
+        container.className = "toast-container";
+        document.body.appendChild(container);
+    }
+    var el = document.createElement("div");
+    el.className = "toast toast-" + (type || "info");
+    el.textContent = msg;
+    container.appendChild(el);
+    setTimeout(function() { el.style.opacity = "0"; el.style.transition = "opacity .2s"; setTimeout(function() { el.remove(); }, 200); }, 2500);
+}
+
+// ─── NEW: Progress bar injection ───────────────────────────────────
+function injectProgressBar() {
+    if (document.getElementById("progressBarWrap")) return;
+    var spinner = document.querySelector(".progress-overlay .spinner");
+    if (!spinner) return;
+    var wrap = document.createElement("div");
+    wrap.id = "progressBarWrap";
+    wrap.className = "progress-bar-wrap";
+    wrap.innerHTML = '<div id="progressBarFill" class="progress-bar-fill"></div>';
+    spinner.appendChild(wrap);
+}
+function updateProgressBar(pct) {
+    injectProgressBar();
+    var fill = document.getElementById("progressBarFill");
+    if (fill) fill.style.width = Math.min(100, Math.max(0, pct || 0)) + "%";
+}
+
+// ─── NEW: Enhanced progress with bar ───────────────────────────────
+var origShowProgress = showProgress;
+showProgress = function(show) {
+    origShowProgress(show);
+    if (show) injectProgressBar();
+};
+
+var origSetApiStatusText = setApiStatusText;
+setApiStatusText = function(text) {
+    origSetApiStatusText(text);
+    var m = text.match(/\((\d+)\s*\/\s*(\d+)\)/);
+    if (m) updateProgressBar(parseInt(m[1]) / parseInt(m[2]) * 100);
+    if (text && text.includes("Checked")) updateProgressBar(100);
+};
+
+// ─── NEW: Keyboard shortcut Ctrl+Enter ─────────────────────────────
+document.addEventListener("keydown", function(e) {
+    if (e.ctrlKey && e.key === "Enter") {
+        var numbersPanel = document.getElementById("numbersPanel");
+        if (numbersPanel && numbersPanel.classList.contains("active-panel")) {
+            var sendBtn = document.getElementById("sendSelectedBtn");
+            if (sendBtn) sendBtn.click();
+        }
+    }
+});
+
+// ─── NEW: Auto-refresh when new numbers captured ───────────────────
+chrome.storage.onChanged.addListener(function(changes, ns) {
+    if (ns !== "local") return;
+    if (changes.capturedNumbers && changes.capturedNumbers.newValue) {
+        var newNums = changes.capturedNumbers.newValue;
+        if (newNums.length && JSON.stringify(newNums) !== JSON.stringify(capturedNumbers)) {
+            capturedNumbers = newNums;
+            originalCapturedNumbers = newNums.slice();
+            selectedNumbersToSend = newNums.slice();
+            renderNumberList();
+            updateStats();
+            showToast("Captured " + newNums.length + " numbers", "success");
+        }
+    }
+});

@@ -1,11 +1,15 @@
 // background.js – Service worker: API calls, storage, message routing
 
 let apiUrls = ["http://localhost:8000/scrape"];
+let apiKey = "";
 
-// Load stored API URLs
-chrome.storage.local.get(["apiUrls"], (result) => {
+// Load stored data
+chrome.storage.local.get(["apiUrls", "apiKey"], (result) => {
     if (result.apiUrls && Array.isArray(result.apiUrls) && result.apiUrls.length) {
         apiUrls = result.apiUrls;
+    }
+    if (result.apiKey) {
+        apiKey = result.apiKey;
     }
 });
 
@@ -77,6 +81,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
         return true;
     }
+    else if (request.action === "saveApiKey") {
+        apiKey = request.key || "";
+        chrome.storage.local.set({ apiKey: apiKey });
+        sendResponse({ success: true });
+        return true;
+    }
+    else if (request.action === "getApiKey") {
+        sendResponse({ key: apiKey });
+        return true;
+    }
 });
 
 async function callApiInChunks(numbers, isAppend = false) {
@@ -99,13 +113,27 @@ async function callApiInChunks(numbers, isAppend = false) {
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 120000);
+                const headers = { "Content-Type": "application/json" };
+                if (apiKey) headers["X-API-Key"] = apiKey;
                 const response = await fetch(url, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: headers,
                     body: JSON.stringify({ numbers: chunk }),
                     signal: controller.signal
                 });
                 clearTimeout(timeoutId);
+                if (response.status === 401) {
+                    await chrome.storage.local.set({
+                        apiState: { status: "error", error: "Authentication required. Add API key in Settings." }
+                    });
+                    return;
+                }
+                if (response.status === 403) {
+                    await chrome.storage.local.set({
+                        apiState: { status: "error", error: "Invalid API key. Check your key in Settings." }
+                    });
+                    return;
+                }
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 
                 const data = await response.json();

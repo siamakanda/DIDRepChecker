@@ -1,24 +1,37 @@
-# Python environment and bytecode
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
 .venv/
 venv/
 ENV/
-build/
-dist/
 
-# Data Files (Ignored as requested)
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project config (contains secrets, user-specific)
+config.json
+
+# Data files
 *.csv
 *.xlsx
 *.xls
 *.tsv
-play.py
-
-# Logs and system files
-*.log
-.DS_Store
-.env
-*.spec
 *.db
 *.sqlite
+
+# Playground / scratch
+play.py
+
+# Logs & env
+*.log
+.env
+*.spec

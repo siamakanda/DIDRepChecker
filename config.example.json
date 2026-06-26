@@ -1,4 +1,4 @@
-﻿{
+{
     "_comment": "Copy this to config.json and adjust values. All fields are optional — defaults are shown.",
     "cache_ttl_days": 3,
     "concurrent_requests": 30,
