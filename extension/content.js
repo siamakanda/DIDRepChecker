@@ -14,6 +14,20 @@ window.addEventListener('NEW_NUMBERS_FOUND', (event) => {
     }
 });
 
+// Listen for sniffer fallback — triggered by inject.js when no API calls detected
+let fallbackTriggered = false;
+window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+    if (event.data.type === 'REQUEST_SCROLL_FALLBACK' && !fallbackTriggered) {
+        fallbackTriggered = true;
+        loadAllNumbersViaScroll().then(numbers => {
+            if (numbers.length) {
+                chrome.runtime.sendMessage({ action: "storeCapturedNumbers", numbers: numbers });
+            }
+        });
+    }
+});
+
 // Listen for selection requests from the popup (via background)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "selectNumbers") {
@@ -34,28 +48,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-// Scroll fallback (keep as before)
+// Scroll fallback — extracts checkbox DIDs from the Peerless page
 async function loadAllNumbersViaScroll() {
-    return new Promise(async (resolve) => {
-        let previousCount = 0;
-        let stableCount = 0;
-        let attempts = 0;
-        while (attempts < 30) {
-            window.scrollTo(0, document.body.scrollHeight);
-            await new Promise(r => setTimeout(r, 1500));
-            const checkboxes = document.querySelectorAll('input[type="checkbox"][id^="qaSelectedNumber_"]');
-            const count = checkboxes.length;
-            if (count === previousCount) {
-                stableCount++;
-                if (stableCount >= 3) break;
-            } else {
-                stableCount = 0;
-                previousCount = count;
-            }
-            attempts++;
-        }
+    const maxAttempts = 20;
+    const scrollDelay = 300;
+    let previousCount = 0;
+    let stableCount = 0;
+    let lastScrollTop = -1;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const container = document.querySelector('[class*="scroll"]') || document.scrollingElement || document.body;
+        container.scrollTo(0, container.scrollHeight);
+        await new Promise(r => setTimeout(r, scrollDelay));
+
+        const currentScrollTop = container.scrollTop;
+        if (currentScrollTop === lastScrollTop) break; // reached bottom
+        lastScrollTop = currentScrollTop;
+
         const checkboxes = document.querySelectorAll('input[type="checkbox"][id^="qaSelectedNumber_"]');
-        const numbers = Array.from(checkboxes).map(cb => cb.value).filter(v => v);
-        resolve(numbers);
-    });
+        const count = checkboxes.length;
+        if (count > 0 && count === previousCount) {
+            stableCount++;
+            if (stableCount >= 2) break;
+        } else {
+            stableCount = 0;
+            previousCount = count;
+        }
+    }
+
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][id^="qaSelectedNumber_"]');
+    return Array.from(checkboxes).map(cb => cb.value).filter(Boolean);
 }

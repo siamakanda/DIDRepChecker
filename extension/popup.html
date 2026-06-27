@@ -2,29 +2,34 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>DID Reputation Selector</title>
+  <title>DID Intel</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
+<div class="app-header">
+  <span class="app-icon">&#9889;</span>
+  <span class="app-name">DID Intel</span>
+  <span class="app-version">v2</span>
+</div>
+
 <div class="tabs">
-  <button class="tab active" data-tab="numbers">📞 Numbers</button>
-  <button class="tab" data-tab="results">📊 Results</button>
-  <button class="tab" data-tab="settings">⚙️ Settings</button>
+  <button class="tab active" data-tab="numbers">&#128231; Numbers</button>
+  <button class="tab" data-tab="results">&#128202; Results<span id="resultsTabBadge" class="tab-badge" style="display:none"></span></button>
+  <button class="tab" data-tab="settings">&#9881; Settings</button>
 </div>
 
 <!-- Stats Bar -->
 <div class="stats-bar">
-  <div class="stats-card"><div class="label">📦 Captured</div><span id="statCaptured">0</span></div>
-  <div class="stats-card"><div class="label">📤 Sent</div><span id="statSent">0</span></div>
-  <div class="stats-card"><div class="label">📊 Results</div><span id="statResults">0</span></div>
-  <div class="stats-card"><div class="label">✅ Selected</div><span id="statSelectedOnPage">0</span></div>
+  <div class="stats-card"><div class="label">Captured</div><span id="statCaptured">0</span></div>
+  <div class="stats-card"><div class="label">Sent</div><span id="statSent">0</span></div>
+  <div class="stats-card"><div class="label">Results</div><span id="statResults">0</span></div>
+  <div class="stats-card"><div class="label">On Page</div><span id="statSelectedOnPage">0</span></div>
 </div>
 
 <!-- Numbers Tab -->
 <div id="numbersPanel" class="panel active-panel">
-  <!-- Paste Section -->
   <div class="paste-section">
-    <button id="showPasteBoxBtn" class="secondary">📋 Paste Numbers</button>
+    <button id="showPasteBoxBtn" class="secondary">Paste Numbers</button>
     <div id="pasteBox" style="display: none;">
       <textarea id="pasteNumbersTextarea" rows="3" placeholder="Enter phone numbers (one per line, comma, space)"></textarea>
       <div class="paste-buttons">
@@ -33,27 +38,24 @@
         <button id="cancelPasteBtn" class="secondary">Cancel</button>
       </div>
     </div>
-    <button id="resetToCapturedBtn" class="secondary" style="display: none;">↻ Reset to Captured</button>
+    <button id="resetToCapturedBtn" class="secondary" style="display: none;">Reset to Captured</button>
   </div>
 
-  <!-- Search -->
   <div class="search-wrap">
-    <input type="text" id="numberSearch" placeholder="🔍 Filter numbers...">
+    <input type="text" id="numberSearch" placeholder="Filter numbers...">
   </div>
 
-  <!-- Number List -->
   <div class="list-header">
-    <span>Available Numbers <span id="numberCountLabel" class="count-badge">0</span></span>
+    <span>Available <span id="numberCountLabel" class="count-badge">0</span></span>
     <div>
-      <button id="selectAllBtn" class="secondary tiny">Check All</button>
-      <button id="deselectAllBtn" class="secondary tiny">Uncheck All</button>
+      <button id="selectAllBtn" class="secondary tiny">All</button>
+      <button id="deselectAllBtn" class="secondary tiny">None</button>
     </div>
   </div>
-  <div class="number-list" id="numbersContainer">Loading numbers...</div>
+  <div class="number-list" id="numbersContainer">Loading...</div>
 
-  <!-- Action Bar -->
   <div class="action-bar">
-    <button id="sendSelectedBtn" class="success">📤 Check Reputation (Selected)</button>
+    <button id="sendSelectedBtn" class="success">Check Reputation</button>
     <div class="action-right">
       <span>Top <input type="number" id="topNPage" value="70" min="1" class="input-small"></span>
       <button id="sendTopPageBtn">Send Top N</button>
@@ -63,59 +65,61 @@
 
 <!-- Results Tab -->
 <div id="resultsPanel" class="panel">
-  <div id="resultsPlaceholder" class="empty-state">No results yet.<br>Send numbers from the Numbers tab.</div>
+  <div id="resultsPlaceholder" class="empty-state">
+    <div class="onboarding-steps">
+      <div class="onboarding-step"><span class="step-num">1</span> Go to your Peerless Network DID page</div>
+      <div class="onboarding-step"><span class="step-num">2</span> Click the extension icon to capture numbers</div>
+      <div class="onboarding-step"><span class="step-num">3</span> Select numbers &amp; click <strong>Check Reputation</strong></div>
+    </div>
+  </div>
   <div id="resultsContent" style="display:none;">
-    <!-- Filter & Sort Bar -->
+    <!-- Summary Bar -->
+    <div id="resultsSummary" class="summary-bar"></div>
+
+    <!-- Filter & Sort -->
     <div class="filter-bar">
       <select id="filterSelect">
         <option value="all">All</option>
-        <option value="Positive">✅ Positive</option>
-        <option value="Negative">❌ Negative</option>
-        <option value="Neutral">🟡 Neutral</option>
-        <option value="Blocked">🚫 Blocked/Error</option>
+        <option value="Positive">Positive</option>
+        <option value="Negative">Negative</option>
+        <option value="Neutral">Neutral</option>
+        <option value="Blocked">Blocked/Error</option>
       </select>
-      <select id="sortSelect">
-        <option value="total_calls">Total Calls</option>
-        <option value="user_reports">User Reports</option>
-        <option value="reputation">Reputation</option>
-        <option value="phone_number">Phone Number</option>
-      </select>
-      <button id="sortAscBtn" class="secondary tiny">▲ Asc</button>
-      <button id="sortDescBtn" class="secondary tiny">▼ Desc</button>
+      <button id="sortAscBtn" class="secondary tiny sort-active">Asc</button>
+      <button id="sortDescBtn" class="secondary tiny">Desc</button>
       <div style="flex:1"></div>
-      <button id="copyResultsBtn" class="secondary tiny">📋 Copy DIDs</button>
-      <button id="retryErrorsBtn" class="secondary tiny">🔄 Retry</button>
+      <span id="scrapedAge" class="scraped-age"></span>
+      <button id="copyResultsBtn" class="secondary tiny">Copy DIDs</button>
+      <button id="retryErrorsBtn" class="secondary tiny">Retry</button>
     </div>
 
-    <!-- Results Table -->
     <div class="results-container">
       <table id="resultsTable">
         <thead>
           <tr>
-            <th class="checkbox-col"><input type="checkbox" id="selectAllRows"></th>
-            <th data-field="phone_number">DID</th>
-            <th data-field="reputation">Reputation</th>
-            <th data-field="robokiller_status">Robokiller</th>
-            <th data-field="total_calls">Calls</th>
-            <th data-field="user_reports">Rpts</th>
-            <th data-field="last_call">Last Call</th>
+            <th class="checkbox-col"><input type="checkbox" id="selectAllRows" title="Select all"></th>
+            <th class="sortable" data-field="phone_number">DID <span class="sort-arrow"></span></th>
+            <th class="sortable" data-field="reputation">Rep <span class="sort-arrow"></span></th>
+            <th class="sortable" data-field="robokiller_status">RK <span class="sort-arrow"></span></th>
+            <th class="sortable" data-field="total_calls">Calls <span class="sort-arrow"></span></th>
+            <th class="sortable" data-field="user_reports">Rpts <span class="sort-arrow"></span></th>
+            <th class="sortable" data-field="last_call">Last Call <span class="sort-arrow"></span></th>
           </tr>
         </thead>
         <tbody id="resultsBody"></tbody>
       </table>
     </div>
-    <div class="results-footer">Showing <span id="displayedCount">0</span> of <span id="totalResultCount">0</span> DIDs</div>
+    <div class="results-footer">Showing <span id="displayedCount">0</span> of <span id="totalResultCount">0</span></div>
 
-    <!-- Action Bar -->
     <div class="action-bar">
       <div class="action-left">
         <span>Top <input type="number" id="topNResults" value="20" min="1" class="input-small"></span>
-        <button id="selectTopResultsBtn" class="success">Select on Page (Top N)</button>
+        <button id="selectTopResultsBtn" class="success">Select on Page</button>
       </div>
       <div class="action-right">
         <button id="selectCheckedResultsBtn" class="success">Select Checked</button>
-        <button id="exportResultsBtn" class="secondary tiny">💾 Export CSV</button>
-        <button id="clearResultsBtn" class="secondary tiny">🗑️ Clear</button>
+        <button id="exportResultsBtn" class="secondary tiny">Export CSV</button>
+        <button id="clearResultsBtn" class="secondary tiny">Clear</button>
       </div>
     </div>
   </div>
@@ -123,37 +127,47 @@
 
 <!-- Settings Tab -->
 <div id="settingsPanel" class="panel">
-  <div class="section-title">🌐 API Endpoints (fallback order)</div>
+  <div class="section-title">API Endpoints</div>
   <div id="apiUrlsList"></div>
   <div class="add-endpoint">
-    <input type="text" id="newApiUrl" placeholder="http://.../scrape">
-    <button id="addApiUrlBtn">➕ Add</button>
+    <input type="text" id="newApiUrl" placeholder="http://localhost:8000/scrape">
+    <button id="addApiUrlBtn">Add</button>
   </div>
+  <div class="url-validation" id="urlValidation"></div>
+  <button id="testConnectionBtn" class="secondary" style="margin-top:8px">Test Connection</button>
   <div id="apiStatus" class="status"></div>
   <hr>
-  <div class="section-title">🔑 API Key</div>
+  <div class="section-title">API Key</div>
   <div class="add-endpoint">
-    <input type="password" id="apiKeyInput" placeholder="Enter API key (leave blank if not required)">
-    <button id="saveApiKeyBtn" class="secondary tiny">💾 Save</button>
+    <input type="password" id="apiKeyInput" placeholder="API key (blank = no auth)">
+    <button id="saveApiKeyBtn" class="secondary tiny">Save</button>
   </div>
   <div id="apiKeyStatus" class="status"></div>
   <hr>
   <div class="settings-row">
-    <button id="clearStorageBtn" class="secondary">🗑️ Clear Stored Results</button>
+    <button id="clearStorageBtn" class="secondary">Clear Stored Results</button>
     <div class="toggle-container">
-      <span>🌙 Dark Mode</span>
+      <span>Dark Mode</span>
       <label class="switch">
         <input type="checkbox" id="darkModeToggle">
         <span class="slider"></span>
       </label>
     </div>
   </div>
-  <div class="footer-version">Version 2.0</div>
+  <div class="footer-version">did_intel v2.0</div>
+  <div class="shortcuts-hint">
+    <strong>Shortcuts:</strong> Ctrl+Enter = Send &middot; Click DID = Copy &middot; Click row header = Sort &middot; Arrows = Nav results
+  </div>
 </div>
 
 <div id="progressOverlay" class="progress-overlay">
   <div class="spinner">
     <div id="progressText">Checking reputation...</div>
+    <div id="progressCount" class="progress-count"></div>
+    <div id="progressBarWrap" class="progress-bar-wrap">
+      <div id="progressBarFill" class="progress-bar-fill"></div>
+    </div>
+    <button id="cancelScrapeBtn" class="cancel-btn">Cancel</button>
   </div>
 </div>
 

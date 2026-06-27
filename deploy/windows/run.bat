@@ -17,17 +17,25 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Read host/port from config or fall back to defaults
+for /f "usebackq tokens=1,2 delims=:" %%a in (`python -c "from did_intel.config import get_config; c=get_config(); print(f\"{c.get('api_host','0.0.0.0')}:{c.get('api_port',8000)}\")"`) do (
+    set API_HOST=%%a
+    set API_PORT=%%b
+)
+if "%API_HOST%"=="" set API_HOST=0.0.0.0
+if "%API_PORT%"=="" set API_PORT=8000
+
 echo.
 echo =======================================
 echo   DID Intel API Server
 echo =======================================
 echo.
-echo Starting FastAPI server on http://localhost:8000
-echo API docs available at http://localhost:8000/docs
+echo Starting FastAPI server on http://%API_HOST%:%API_PORT%
+echo API docs available at http://%API_HOST%:%API_PORT%/docs
 echo Press Ctrl+C to stop the server.
 echo.
 
-REM Run Uvicorn in production mode (no --reload)
-uvicorn did_intel.api:app --host 0.0.0.0 --port 8000
+REM Use didintel-server (reads config for host/port)
+didintel-server
 
 pause

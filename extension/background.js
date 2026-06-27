@@ -27,9 +27,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     else if (request.action === "startReputationCheck") {
         const isAppend = request.append || false;
-        if (!isAppend) {
-            chrome.storage.local.set({ apiResults: [] });
-        }
         chrome.storage.local.set({ 
             apiState: { status: "running", progress: 0, total: request.numbers.length, error: null } 
         });

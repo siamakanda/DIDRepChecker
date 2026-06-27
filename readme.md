@@ -6,8 +6,7 @@ A complete toolkit to extract phone numbers from the Peerless Network page, chec
 ## 📦 What's Inside
 
 - **Chrome Extension** – Captures DIDs from the Peerless API, calls the reputation server, displays sortable/filterable results, and auto‑selects checkboxes.
-- **Reputation API Server** – FastAPI‑based REST API that uses an async scraper to look up phone numbers on RoboKiller. Includes SQLite caching, rate limiting, and retries.
-- **CLI Tool** – Command‑line interface for batch processing, with real‑time progress, retry logic, clipboard copy, and CSV/JSON export.
+- **Python Package (`src/did_intel`)** – FastAPI server, async RoboKiller scraper, SQLite cache, and CLI tool in one package.
 - **Deployment Scripts** – One‑command installation for Ubuntu (systemd + Nginx) and one‑line PowerShell installer for Windows.
 
 ---
@@ -58,9 +57,10 @@ The API will be available at `http://localhost:8000/scrape`.
 ### Manual Run (Any OS)
 
 ```bash
-cd server
-pip install -r requirements.txt
-uvicorn api_server:app --reload
+cd src
+pip install -e .
+cd ..
+uvicorn did_intel.api:app --reload
 ```
 
 ---
@@ -98,17 +98,19 @@ uvicorn api_server:app --reload
 
 ## 🖥️ CLI Tool
 
-The CLI tool (`cli_tool/did_cli.py`) processes phone numbers directly from the terminal.
+The CLI tool (`src/did_intel/cli.py`) processes phone numbers directly from the terminal.
 
 ### Usage
 
 ```bash
-# Activate virtual environment (from the server directory)
-cd server
+# Activate virtual environment
 source venv/bin/activate   # or venv\Scripts\activate on Windows
 
+# Install the package (first time only)
+pip install -e .
+
 # Run the CLI
-python ../cli_tool/did_cli.py -f numbers.txt --filter positive --sort total_calls --order asc --limit 70
+didintel -f numbers.txt --filter positive --sort total_calls --order asc --limit 70
 ```
 
 ### Options
@@ -129,13 +131,13 @@ python ../cli_tool/did_cli.py -f numbers.txt --filter positive --sort total_call
 
 ```bash
 # Interactive paste mode (loop by default)
-python did_cli.py
+didintel
 
 # Process a file once, output top 70 positive numbers by fewest calls
-python did_cli.py -f numbers.txt --once --filter positive --sort total_calls --order asc --limit 70
+didintel -f numbers.txt --once --filter positive --sort total_calls --order asc --limit 70
 
 # Non‑interactive, export full results to CSV
-python did_cli.py -f numbers.csv --no-interactive --export results.csv
+didintel -f numbers.csv --no-interactive --export results.csv
 ```
 
 ---
@@ -152,22 +154,29 @@ DIDRepChecker/
 │   ├── popup.html
 │   ├── popup.css
 │   └── popup.js
-├── server/                 # FastAPI backend
-│   ├── __init__.py
-│   ├── api_server.py
-│   ├── scraper_engine.py
-│   ├── cache.py
-│   ├── requirements.txt
-│   └── run_windows.bat
-├── cli_tool/               # Command‑line interface
-│   ├── api_client.py
-│   └── did_cli.py
-├── scripts/                # Deployment automation
-│   ├── install_linux.sh
-│   ├── uninstall_linux.sh
-│   ├── install_windows.ps1
-│   └── uninstall_windows.ps1
-├── requirements.txt        # Root dependencies (if any)
+├── src/                    # Python package
+│   ├── pyproject.toml
+│   └── did_intel/
+│       ├── __init__.py
+│       ├── api.py          # FastAPI server
+│       ├── scraper.py      # RoboKiller scraper engine
+│       ├── cache.py        # SQLite cache
+│       ├── cli.py          # Interactive CLI tool
+│       ├── client.py       # API client
+│       └── config.py       # Configuration management
+├── deploy/
+│   ├── windows/            # Windows installer, runner, uninstaller
+│   │   ├── install.ps1
+│   │   ├── run.bat
+│   │   └── uninstall.ps1
+│   └── linux/              # Linux installer, systemd, nginx
+│       ├── install.sh
+│       ├── uninstall.sh
+│       ├── did-intel.service
+│       └── nginx.conf
+├── requirements.txt
+├── config.example.json
+├── LICENSE
 └── README.md
 ```
 
@@ -177,9 +186,33 @@ DIDRepChecker/
 
 - Python 3.9+
 - Chrome browser (for the extension)
-- Dependencies are listed in `server/requirements.txt`.
+- Dependencies are listed in `requirements.txt`.
 
 For server deployment on Linux, you also need `nginx`, `systemd`, and `git`.
+
+---
+
+## 🐳 Docker
+
+```bash
+docker build -t did-intel .
+docker run -p 8000:8000 did-intel
+```
+
+Configure via environment variables:
+```bash
+docker run -p 8000:8000 -e DIDINTEL_API_KEY_REQUIRED=true -e DIDINTEL_ALLOWED_API_KEYS=mykey did-intel
+```
+
+---
+
+## 🧪 Testing
+
+```bash
+pip install -r requirements.txt
+pip install -e .
+pytest tests -v
+```
 
 ---
 

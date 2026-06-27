@@ -35,3 +35,8 @@ play.py
 *.log
 .env
 *.spec
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage

@@ -5,8 +5,8 @@
   "description": "Captures DIDs from Peerless API, checks reputation via local API, and auto-selects checkboxes.",
   "permissions": ["storage", "clipboardWrite", "activeTab", "scripting"],
   "host_permissions": [
-    "http://localhost:5000/",
-    "http://127.0.0.1:5000/",
+    "http://localhost:8000/",
+    "http://127.0.0.1:8000/",
     "https://animate.peerlessnetwork.com/*"
   ],
   "background": {

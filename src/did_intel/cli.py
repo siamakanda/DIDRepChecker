@@ -31,6 +31,8 @@ except ImportError:
     CLIPBOARD_AVAILABLE = False
 
 from did_intel.scraper import RoboKillerScraper, clean_number
+from did_intel.cache import ReputationCache
+from did_intel.config import get_config
 
 VERSION = "1.0.0"
 console = Console()
@@ -400,6 +402,45 @@ class DIDScraperCLI:
                 iteration += 1
 
 
+def _print_stats():
+    import asyncio
+    import aiosqlite
+
+    async def _get():
+        cache = ReputationCache()
+        await cache._init_db()
+        async with aiosqlite.connect(cache.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT COUNT(*) AS total, "
+                "SUM(CASE WHEN reputation='Positive' THEN 1 ELSE 0 END) AS pos, "
+                "SUM(CASE WHEN reputation='Negative' THEN 1 ELSE 0 END) AS neg, "
+                "MAX(scraped_at) AS latest "
+                "FROM reputation"
+            ) as cursor:
+                return await cursor.fetchone()
+
+    try:
+        row = asyncio.run(_get())
+    except Exception as e:
+        console.print(f"[red]Failed to read cache: {e}[/red]")
+        return
+
+    cfg = get_config()
+    cache_path = ReputationCache().db_path
+    console.print(f"[bold]Cache path:[/bold] {cache_path}")
+    console.print(f"[bold]Cache TTL:[/bold] {cfg.get('cache_ttl_days', 3)} days")
+
+    if row:
+        console.print(f"[bold]Total entries:[/bold] {row['total']}")
+        console.print(f"  [green]Positive:[/green] {row['pos']}")
+        console.print(f"  [red]Negative:[/red] {row['neg']}")
+        if row['latest']:
+            console.print(f"[bold]Latest scrape:[/bold] {row['latest']}")
+    else:
+        console.print("[dim]No entries in cache yet.[/dim]")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="DID Reputation Checker – High-speed phone number reputation lookup via RoboKiller",
@@ -419,8 +460,13 @@ def main():
     parser.add_argument("--limit", help="Maximum number of results or 'all'")
     parser.add_argument("--export", help="Export full results to file (CSV or JSON based on extension)")
     parser.add_argument("--export-format", choices=["csv", "json"], default="csv")
+    parser.add_argument("--stats", action="store_true", help="Print cache statistics and exit")
 
     args = parser.parse_args()
+
+    if args.stats:
+        _print_stats()
+        return
 
     app = DIDScraperCLI()
     try:

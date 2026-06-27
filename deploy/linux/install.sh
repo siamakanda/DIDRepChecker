@@ -97,6 +97,7 @@ log "Installing Python packages..."
 source "$VENV_DIR/bin/activate"
 pip install --upgrade pip -q
 pip install -r "$INSTALL_DIR/requirements.txt" -q 2>&1 | sed 's/^/  /'
+pip install -e "$INSTALL_DIR" -q 2>&1 | sed 's/^/  /'
 deactivate
 ok "Python dependencies installed ($($VENV_DIR/bin/python3 --version))"
 
@@ -188,8 +189,8 @@ cat > "/etc/nginx/sites-available/$SERVICE_NAME" <<'NGINX'
 # DID Intel — Nginx reverse proxy
 # Proxies :80 → uvicorn on 127.0.0.1:8000
 
-# Rate limit definition (30 req/min per IP, burst of 10)
-limit_req_zone $binary_remote_addr zone=didintel:10m rate=30r/m;
+# Rate limit definition (300 req/min per IP, burst of 50)
+limit_req_zone $binary_remote_addr zone=didintel:10m rate=300r/m;
 
 server {
     listen 80 default_server;

@@ -10,6 +10,7 @@ import argparse
 import requests
 from pathlib import Path
 from typing import List, Dict, Optional
+from did_intel.utils import clean_number
 
 # Optional: rich for pretty output (install with `pip install rich`)
 try:
@@ -25,18 +26,8 @@ except ImportError:
 console = Console() if RICH_AVAILABLE else None
 
 # ----------------------------------------------------------------------
-# Helper: Parse numbers (same as did_cli.py)
+# Helper: Parse numbers
 # ----------------------------------------------------------------------
-def clean_number(number) -> str:
-    """Extract 10-digit phone number."""
-    if not number or not isinstance(number, (str, int)):
-        return ""
-    cleaned = ''.join(filter(str.isdigit, str(number)))
-    if cleaned.startswith('1') and len(cleaned) == 11:
-        cleaned = cleaned[1:]
-    return cleaned if len(cleaned) == 10 else ""
-
-
 def parse_numbers(input_source: str, input_file: Optional[str]) -> List[str]:
     """Parse numbers from command line argument or file."""
     numbers = []

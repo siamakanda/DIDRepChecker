@@ -112,6 +112,12 @@ if (Test-Path "$InstallDir\requirements.txt") {
     pip install fastapi uvicorn aiohttp lxml aiosqlite pyperclip
 }
 
+if (Test-Path "$InstallDir\src") {
+    pip install -e "$InstallDir"
+} else {
+    Write-Host "src/ directory not found. The did_intel package may not be importable." -ForegroundColor Yellow
+}
+
 # --- Create default config.json if missing ---
 $configFile = "$InstallDir\config.json"
 if (-not (Test-Path $configFile)) {
@@ -151,6 +157,7 @@ if (Test-Path $runScript) {
     Write-Host "To start the server manually:" -ForegroundColor Cyan
     Write-Host "  cd $InstallDir" -ForegroundColor Cyan
     Write-Host "  .\venv\Scripts\activate" -ForegroundColor Cyan
+    Write-Host "  pip install -e ." -ForegroundColor Cyan
     Write-Host "  uvicorn did_intel.api:app --host 0.0.0.0 --port 8000" -ForegroundColor Cyan
 }
 Write-Host ""

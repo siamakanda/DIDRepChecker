@@ -13,6 +13,7 @@ from typing import List, Dict, Optional, Callable, Any
 from datetime import datetime
 from lxml import html
 from did_intel.cache import ReputationCache
+from did_intel.utils import clean_number
 
 # ----------------------------------------------------------------------
 # Configuration defaults
@@ -56,16 +57,6 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------
 # Helper functions (stateless)
 # ----------------------------------------------------------------------
-def clean_number(number) -> str:
-    """Extract 10-digit phone number from any input."""
-    if not number or not isinstance(number, (str, int)):
-        return ""
-    cleaned = ''.join(filter(str.isdigit, str(number)))
-    if cleaned.startswith('1') and len(cleaned) == 11:
-        cleaned = cleaned[1:]
-    return cleaned if len(cleaned) == 10 else ""
-
-
 def get_random_headers() -> Dict[str, str]:
     """Generate random HTTP headers for anti‑detection."""
     user_agent = random.choice(USER_AGENTS)
@@ -390,11 +381,15 @@ class RoboKillerScraper:
 # ----------------------------------------------------------------------
 # Backward compatibility for existing CLI scripts
 # ----------------------------------------------------------------------
-_legacy_scraper = RoboKillerScraper()
+_legacy_scraper = None
+
 
 def scrape_numbers_sync(phone_numbers: List[str],
                         progress_callback: Optional[Callable] = None) -> List[Dict[str, str]]:
     """Legacy synchronous wrapper (kept for compatibility)."""
+    global _legacy_scraper
+    if _legacy_scraper is None:
+        _legacy_scraper = RoboKillerScraper()
     return _legacy_scraper.scrape(phone_numbers, progress_callback)
 
 __all__ = ["RoboKillerScraper", "clean_number", "scrape_numbers_sync", "DEFAULT_CONFIG"]

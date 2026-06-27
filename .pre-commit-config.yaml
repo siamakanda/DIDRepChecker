@@ -1,0 +1,17 @@
+repos:
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: pytest tests -q
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+
+      - id: validate-manifest
+        name: validate extension manifest
+        entry: python -c "import json; m=json.load(open('extension/manifest.json')); assert m.get('manifest_version')==3; print('OK')"
+        language: system
+        files: ^extension/manifest\.json$
+        pass_filenames: false

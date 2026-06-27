@@ -1,7 +1,9 @@
 // inject.js – intercepts API calls and also provides persistent number selector
 
 (function() {
-    // ---------- API Sniffer (unchanged) ----------
+    let snifferFoundNumbers = false;
+
+    // ---------- API Sniffer ----------
     function extractNumbers(data) {
         if (data && data.data && Array.isArray(data.data)) {
             return data.data.map(item => item.number).filter(n => n);
@@ -11,6 +13,7 @@
 
     function dispatchNumbers(numbers) {
         if (numbers && numbers.length) {
+            snifferFoundNumbers = true;
             window.dispatchEvent(new CustomEvent('NEW_NUMBERS_FOUND', { detail: numbers }));
         }
     }
@@ -41,6 +44,13 @@
         }
         return response;
     };
+
+    // Auto-fallback: if sniffer found nothing within 5 seconds, trigger scroll extraction
+    setTimeout(() => {
+        if (!snifferFoundNumbers) {
+            window.postMessage({ type: 'REQUEST_SCROLL_FALLBACK' }, '*');
+        }
+    }, 5000);
 
     // ---------- Persistent Number Selector (mimics sample extension) ----------
     let targetNumbers = [];

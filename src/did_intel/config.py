@@ -10,8 +10,11 @@ Reads from, in order of precedence:
 import json
 import os
 import sys
+import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger("did_intel.config")
 
 # ---------------------------------------------------------------------------
 # Defaults (used when nothing else is provided)
@@ -129,7 +132,24 @@ def load_config(extra_paths: Optional[list[Path]] = None) -> Dict[str, Any]:
     for key, value in config.items():
         config[key] = _env_override(key, value)
 
+    _validate_config(config)
     return config
+
+
+def _validate_config(cfg: Dict[str, Any]):
+    """Warn about suspicious config values."""
+    if cfg.get("cache_ttl_days", 3) < 0:
+        logger.warning("cache_ttl_days is negative (%s) — cache may never expire", cfg["cache_ttl_days"])
+    if cfg.get("cache_ttl_days", 3) == 0:
+        logger.warning("cache_ttl_days is 0 — cache will always be stale")
+    if cfg.get("concurrent_requests", 30) < 1:
+        logger.warning("concurrent_requests < 1 (%s) — will not scrape anything", cfg["concurrent_requests"])
+    if cfg.get("requests_per_second", 5) < 0.1:
+        logger.warning("requests_per_second < 0.1 (%s) — extremely slow", cfg["requests_per_second"])
+    if cfg.get("api_key_required") and not cfg.get("allowed_api_keys"):
+        logger.warning("api_key_required is True but allowed_api_keys is empty — all requests will be rejected")
+    if cfg.get("api_port", 8000) < 1 or cfg.get("api_port", 8000) > 65535:
+        logger.warning("api_port is out of range (%s)", cfg["api_port"])
 
 
 # Convenience: load once at import time (can be refreshed by calling load_config again)

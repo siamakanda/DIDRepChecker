@@ -10,7 +10,6 @@ const deselectAllBtn = document.getElementById("deselectAllBtn");
 const resultsPlaceholder = document.getElementById("resultsPlaceholder");
 const resultsContent = document.getElementById("resultsContent");
 const filterSelect = document.getElementById("filterSelect");
-const sortSelect = document.getElementById("sortSelect");
 const sortAscBtn = document.getElementById("sortAscBtn");
 const sortDescBtn = document.getElementById("sortDescBtn");
 const topNResultsInput = document.getElementById("topNResults");
@@ -87,7 +86,7 @@ const PREF_KEYS = {
 async function savePreferences() {
     const prefs = {
         [PREF_KEYS.filter]: filterSelect.value,
-        [PREF_KEYS.sortField]: sortSelect.value,
+        [PREF_KEYS.sortField]: currentSortField,
         [PREF_KEYS.sortAsc]: currentSortAsc,
         [PREF_KEYS.topNPage]: topNPageInput.value,
         [PREF_KEYS.topNResults]: topNResultsInput.value
@@ -105,11 +104,10 @@ async function loadPreferences() {
         filterSelect.value = "Positive";
         currentFilter = "Positive";
     }
-    if (prefs[PREF_KEYS.sortField]) sortSelect.value = prefs[PREF_KEYS.sortField];
+    if (prefs[PREF_KEYS.sortField]) currentSortField = prefs[PREF_KEYS.sortField];
     if (typeof prefs[PREF_KEYS.sortAsc] === 'boolean') currentSortAsc = prefs[PREF_KEYS.sortAsc];
     if (prefs[PREF_KEYS.topNPage]) topNPageInput.value = prefs[PREF_KEYS.topNPage];
     if (prefs[PREF_KEYS.topNResults]) topNResultsInput.value = prefs[PREF_KEYS.topNResults];
-    currentSortField = sortSelect.value;
     renderResultsTable();
 }
 
@@ -139,19 +137,23 @@ function switchToResultsTab() {
 
 function showProgress(show) {
     progressOverlay.style.display = show ? "flex" : "none";
+    if (!show) {
+        const pc = document.getElementById("progressCount");
+        if (pc) pc.innerText = "";
+        updateProgressBar(0);
+    }
 }
 
 function updateStats() {
     document.getElementById("statCaptured").innerText = capturedNumbers.length;
     document.getElementById("statSent").innerText = lastSentCount;
 
-    // Color-coded: total with positive(green) / negative(red) breakdown
-    var pos = 0, neg = 0;
-    for (var i = 0; i < apiResults.length; i++) {
+    let pos = 0, neg = 0;
+    for (let i = 0; i < apiResults.length; i++) {
         if (apiResults[i].reputation === "Positive") pos++;
         else if (apiResults[i].reputation === "Negative") neg++;
     }
-    var statResults = document.getElementById("statResults");
+    const statResults = document.getElementById("statResults");
     if (pos + neg > 0) {
         statResults.innerHTML = apiResults.length + ' <span style="font-size:11px;color:var(--success)">' + pos + '</span> <span style="font-size:11px;color:var(--danger)">' + neg + '</span>';
     } else {
@@ -202,9 +204,9 @@ async function loadCapturedNumbers() {
 
 function renderNumberList() {
     selectedNumbersToSend = [...capturedNumbers];
-    var searchText = (document.getElementById("numberSearch")?.value || "").trim().toLowerCase();
-    var filtered = searchText ? capturedNumbers.filter(function(n) { return n.indexOf(searchText) >= 0; }) : capturedNumbers;
-    var html = "";
+    const searchText = (document.getElementById("numberSearch")?.value || "").trim().toLowerCase();
+    const filtered = searchText ? capturedNumbers.filter(function(n) { return n.indexOf(searchText) >= 0; }) : capturedNumbers;
+    let html = "";
     filtered.forEach(function(num) {
         html += '<div class="number-item"><input type="checkbox" class="num-checkbox" value="' + num + '" checked> <span>' + num + '</span></div>';
     });
@@ -217,7 +219,7 @@ function renderNumberList() {
 }
 
 function updateNumberCount() {
-    var label = document.getElementById("numberCountLabel");
+    const label = document.getElementById("numberCountLabel");
     if (label) label.textContent = capturedNumbers.length;
 }
 
@@ -276,10 +278,11 @@ function updateFilterDropdown() {
 
 function renderResultsTable() {
     if (!apiResults.length) {
-        document.getElementById("resultsBody").innerHTML = '<tr><td colspan="7" class="empty-state">No results to display. </td> </table>';
+        document.getElementById("resultsBody").innerHTML = '';
         document.getElementById("displayedCount").innerText = "0";
         document.getElementById("totalResultCount").innerText = "0";
         if (selectAllRowsCheckbox) selectAllRowsCheckbox.checked = false;
+        updateSummaryBar();
         return;
     }
 
@@ -303,24 +306,52 @@ function renderResultsTable() {
     tbody.innerHTML = "";
     filtered.forEach(res => {
         const row = tbody.insertRow();
+        // Row tinting
+        if (res.reputation === "Positive") row.className = "tr-positive";
+        else if (res.reputation === "Negative") row.className = "tr-negative";
+
         const cbCell = row.insertCell(0);
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.className = "row-checkbox";
         cb.dataset.number = res.phone_number;
         cbCell.appendChild(cb);
-        row.insertCell(1).innerText = res.phone_number;
+
+        // DID cell — clickable to copy
+        const didCell = row.insertCell(1);
+        didCell.innerHTML = `<span class="did-cell" data-number="${res.phone_number}">${res.phone_number}</span>`;
+        didCell.querySelector(".did-cell").addEventListener("click", (e) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(res.phone_number);
+            const el = e.target;
+            el.classList.add("copied");
+            setTimeout(() => el.classList.remove("copied"), 400);
+            showToast("Copied " + res.phone_number, "info");
+        });
+
         row.insertCell(2).innerHTML = getReputationBadge(res.reputation);
         row.insertCell(3).innerText = res.robokiller_status || "";
         row.insertCell(4).innerText = res.total_calls || "0";
         row.insertCell(5).innerText = res.user_reports || "0";
         row.insertCell(6).innerText = res.last_call || "N/A";
+
+        // Click anywhere on row to toggle checkbox
+        row.addEventListener("click", (e) => {
+            if (e.target.tagName === "INPUT") return; // actual checkbox handles itself
+            cb.checked = !cb.checked;
+            updateSelectAllCheckbox();
+        });
     });
 
     document.getElementById("displayedCount").innerText = filtered.length;
     document.getElementById("totalResultCount").innerText = apiResults.length;
-    updateStats();
+    updateSelectAllCheckbox();
+    updateSummaryBar();
+    updateScrapedAge();
+}
+}
 
+function updateSelectAllCheckbox() {
     const allCheckboxes = document.querySelectorAll('.row-checkbox');
     const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
     if (selectAllRowsCheckbox) {
@@ -329,7 +360,34 @@ function renderResultsTable() {
     }
 }
 
-function getTopResultsNumbers(n) {
+function updateSummaryBar() {
+    const bar = document.getElementById("resultsSummary");
+    if (!bar) return;
+    const pos = apiResults.filter(r => r.reputation === "Positive").length;
+    const neg = apiResults.filter(r => r.reputation === "Negative").length;
+    const other = apiResults.length - pos - neg;
+    if (apiResults.length === 0) {
+        bar.innerHTML = "";
+        return;
+    }
+    bar.innerHTML = `
+        <div class="summary-card summary-positive"><span class="sum-num">${pos}</span><span class="sum-label">Positive</span></div>
+        <div class="summary-card summary-negative"><span class="sum-num">${neg}</span><span class="sum-label">Negative</span></div>
+        <div class="summary-card summary-other"><span class="sum-num">${other}</span><span class="sum-label">Other</span></div>
+    `;
+}
+
+function updateScrapedAge() {
+    const el = document.getElementById("scrapedAge");
+    if (!el || !apiResults.length) { if (el) el.innerText = ""; return; }
+    const timestamps = apiResults.map(r => r.scraped_at).filter(Boolean).sort();
+    if (!timestamps.length) { el.innerText = ""; return; }
+    const latest = new Date(timestamps[timestamps.length - 1]);
+    const mins = Math.round((Date.now() - latest.getTime()) / 60000);
+    if (mins < 1) el.innerText = "just now";
+    else if (mins < 60) el.innerText = mins + "m ago";
+    else el.innerText = Math.round(mins / 60) + "h ago";
+}
     let filtered = [...apiResults];
     if (currentFilter !== "all") {
         filtered = filtered.filter(r => r.reputation === currentFilter);
@@ -476,17 +534,17 @@ resetToCapturedBtn.addEventListener("click", async () => {
 });
 
 // Live paste counter
-var pasteTextarea = document.getElementById("pasteNumbersTextarea");
+const pasteTextarea = document.getElementById("pasteNumbersTextarea");
 if (pasteTextarea) {
     pasteTextarea.addEventListener("input", function() {
-        var count = parsePastedNumbers(pasteTextarea.value).length;
-        var pc = document.getElementById("pasteCount");
+        const count = parsePastedNumbers(pasteTextarea.value).length;
+        const pc = document.getElementById("pasteCount");
         if (pc) pc.textContent = count + " numbers detected";
     });
 }
 
 // Search filter
-var searchInput = document.getElementById("numberSearch");
+const searchInput = document.getElementById("numberSearch");
 if (searchInput) {
     searchInput.addEventListener("input", function() { renderNumberList(); });
 }
@@ -510,11 +568,6 @@ deselectAllBtn.addEventListener("click", () => {
 });
 filterSelect.addEventListener("change", () => {
     currentFilter = filterSelect.value;
-    savePreferences();
-    renderResultsTable();
-});
-sortSelect.addEventListener("change", () => {
-    currentSortField = sortSelect.value;
     savePreferences();
     renderResultsTable();
 });
@@ -640,8 +693,8 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         }
         if (changes.apiResults) {
             apiResults = changes.apiResults.newValue || [];
+            showResultsTabBadge(apiResults.length > 0);
             if (apiResults.length > 0) {
-                // Ensure filter is set to Positive if no user preference yet
                 if (currentFilter === "all" || !filterSelect.value) {
                     filterSelect.value = "Positive";
                     currentFilter = "Positive";
@@ -700,15 +753,17 @@ chrome.runtime.sendMessage({ action: "getApiKey" }, (response) => {
 
 // Initial loads
 loadPreferences();
-// Highlight default sort button
 if (sortAscBtn && currentSortAsc) sortAscBtn.classList.add("sort-active");
 if (sortDescBtn && !currentSortAsc) sortDescBtn.classList.add("sort-active");
+// Highlight initial sort column header
+const initHeader = document.querySelector(`#resultsTable th.sortable[data-field="${currentSortField}"]`);
+if (initHeader) initHeader.classList.add(currentSortAsc ? "sort-asc" : "sort-desc", "sort-active-col");
 loadCapturedNumbers();
 loadApiUrls();
 chrome.runtime.sendMessage({ action: "getApiResults" }, (response) => {
     if (response.results && response.results.length) {
         apiResults = response.results;
-        // Force Positive filter if none saved
+        showResultsTabBadge(true);
         if (currentFilter === "all" || !filterSelect.value) {
             filterSelect.value = "Positive";
             currentFilter = "Positive";
@@ -753,68 +808,173 @@ function getReputationBadge(rep) {
 
 // ─── NEW: Toast notifications ──────────────────────────────────────
 function showToast(msg, type) {
-    var container = document.getElementById("toastContainer");
+    let container = document.getElementById("toastContainer");
     if (!container) {
         container = document.createElement("div");
         container.id = "toastContainer";
         container.className = "toast-container";
         document.body.appendChild(container);
     }
-    var el = document.createElement("div");
+    const el = document.createElement("div");
     el.className = "toast toast-" + (type || "info");
     el.textContent = msg;
     container.appendChild(el);
     setTimeout(function() { el.style.opacity = "0"; el.style.transition = "opacity .2s"; setTimeout(function() { el.remove(); }, 200); }, 2500);
 }
 
-// ─── NEW: Progress bar injection ───────────────────────────────────
-function injectProgressBar() {
-    if (document.getElementById("progressBarWrap")) return;
-    var spinner = document.querySelector(".progress-overlay .spinner");
-    if (!spinner) return;
-    var wrap = document.createElement("div");
-    wrap.id = "progressBarWrap";
-    wrap.className = "progress-bar-wrap";
-    wrap.innerHTML = '<div id="progressBarFill" class="progress-bar-fill"></div>';
-    spinner.appendChild(wrap);
-}
+// ─── Progress bar ────────────────────────────────────────────────
 function updateProgressBar(pct) {
-    injectProgressBar();
-    var fill = document.getElementById("progressBarFill");
+    const fill = document.getElementById("progressBarFill");
     if (fill) fill.style.width = Math.min(100, Math.max(0, pct || 0)) + "%";
 }
 
-// ─── NEW: Enhanced progress with bar ───────────────────────────────
-var origShowProgress = showProgress;
-showProgress = function(show) {
-    origShowProgress(show);
-    if (show) injectProgressBar();
-};
-
-var origSetApiStatusText = setApiStatusText;
+// ─── Enhanced progress bar ──────────────────────────────────────
+const origSetApiStatusText = setApiStatusText;
 setApiStatusText = function(text) {
     origSetApiStatusText(text);
-    var m = text.match(/\((\d+)\s*\/\s*(\d+)\)/);
-    if (m) updateProgressBar(parseInt(m[1]) / parseInt(m[2]) * 100);
+    const m = text.match(/\((\d+)\s*\/\s*(\d+)\)/);
+    if (m) {
+        updateProgressBar(parseInt(m[1]) / parseInt(m[2]) * 100);
+        const pc = document.getElementById("progressCount");
+        if (pc) pc.innerText = m[1] + " / " + m[2] + " DIDs";
+    }
     if (text && text.includes("Checked")) updateProgressBar(100);
 };
 
-// ─── NEW: Keyboard shortcut Ctrl+Enter ─────────────────────────────
-document.addEventListener("keydown", function(e) {
-    if (e.ctrlKey && e.key === "Enter") {
-        var numbersPanel = document.getElementById("numbersPanel");
-        if (numbersPanel && numbersPanel.classList.contains("active-panel")) {
-            var sendBtn = document.getElementById("sendSelectedBtn");
-            if (sendBtn) sendBtn.click();
+// ─── Column header click to sort ────────────────────────────────
+document.querySelectorAll("#resultsTable th.sortable").forEach(th => {
+    th.addEventListener("click", () => {
+        const field = th.dataset.field;
+        if (currentSortField === field) {
+            currentSortAsc = !currentSortAsc;
+        } else {
+            currentSortField = field;
+            currentSortAsc = (field === "total_calls" || field === "user_reports") ? false : true;
         }
-    }
+        // Update sort button states
+        if (sortAscBtn) {
+            if (currentSortAsc) { sortAscBtn.classList.add("sort-active"); sortDescBtn.classList.remove("sort-active"); }
+            else { sortDescBtn.classList.add("sort-active"); sortAscBtn.classList.remove("sort-active"); }
+        }
+        // Update column header arrows
+        document.querySelectorAll("#resultsTable th.sortable").forEach(h => {
+            h.classList.remove("sort-asc", "sort-desc", "sort-active-col");
+        });
+        th.classList.add(currentSortAsc ? "sort-asc" : "sort-desc", "sort-active-col");
+        savePreferences();
+        renderResultsTable();
+    });
 });
 
-// ─── NEW: Auto-refresh when new numbers captured ───────────────────
+// ─── Cancel scrape ────────────────────────────────────────────────
+const cancelScrapeBtn = document.getElementById("cancelScrapeBtn");
+if (cancelScrapeBtn) {
+    cancelScrapeBtn.addEventListener("click", async () => {
+        await chrome.storage.local.set({
+            apiState: { status: "cancelled", progress: 0, total: 0, error: "Cancelled by user" }
+        });
+        showProgress(false);
+        setApiStatusText("Scrape cancelled.");
+        updateProgressBar(0);
+        const pc = document.getElementById("progressCount");
+        if (pc) pc.innerText = "";
+    });
+}
+
+// ─── Test Connection ─────────────────────────────────────────────
+const testConnectionBtn = document.getElementById("testConnectionBtn");
+if (testConnectionBtn) {
+    testConnectionBtn.addEventListener("click", async () => {
+        const resp = await chrome.runtime.sendMessage({ action: "getApiUrls" });
+        const urls = resp.urls;
+        if (!urls.length) {
+            apiStatus.innerText = "No endpoints configured.";
+            return;
+        }
+        apiStatus.innerText = "Testing connection...";
+        try {
+            const baseUrl = urls[0].replace(/\/scrape$/, "");
+            const res = await fetch(baseUrl + "/health", { method: "GET", signal: AbortSignal.timeout(5000) });
+            if (res.ok) {
+                apiStatus.innerText = "Connected (health check OK)";
+                apiStatus.style.color = "var(--success)";
+            } else {
+                apiStatus.innerText = "Server returned " + res.status;
+                apiStatus.style.color = "var(--danger)";
+            }
+        } catch (e) {
+            apiStatus.innerText = "Connection failed: " + e.message;
+            apiStatus.style.color = "var(--danger)";
+        }
+    });
+}
+
+// ─── URL validation ──────────────────────────────────────────────
+if (newApiUrlInput) {
+    newApiUrlInput.addEventListener("input", () => {
+        const val = newApiUrlInput.value.trim();
+        const vd = document.getElementById("urlValidation");
+        if (!vd) return;
+        if (!val) { vd.innerHTML = ""; newApiUrlInput.classList.remove("input-valid", "input-invalid"); return; }
+        try {
+            const u = new URL(val);
+            const ok = (u.protocol === "http:" || u.protocol === "https:") && u.pathname.endsWith("/scrape");
+            vd.innerHTML = ok ? '<span class="url-valid">Valid endpoint</span>' : '<span class="url-invalid">Path should end with /scrape</span>';
+            newApiUrlInput.classList.toggle("input-valid", ok);
+            newApiUrlInput.classList.toggle("input-invalid", !ok);
+        } catch {
+            vd.innerHTML = '<span class="url-invalid">Invalid URL format</span>';
+            newApiUrlInput.classList.add("input-invalid");
+            newApiUrlInput.classList.remove("input-valid");
+        }
+    });
+}
+
+// ─── Tab badge ───────────────────────────────────────────────────
+function showResultsTabBadge(show) {
+    const badge = document.getElementById("resultsTabBadge");
+    if (badge) badge.style.display = show ? "inline-block" : "none";
+}
+
+// ─── Keyboard navigation: arrow keys, space to select ────────────
+document.addEventListener("keydown", function(e) {
+    // Ctrl+Enter: send selected
+    if (e.ctrlKey && e.key === "Enter") {
+        const numbersPanel = document.getElementById("numbersPanel");
+        if (numbersPanel && numbersPanel.classList.contains("active-panel")) {
+            const sendBtn = document.getElementById("sendSelectedBtn");
+            if (sendBtn) sendBtn.click();
+        }
+        return;
+    }
+    // Arrow keys / Space in results table
+    const resultsPanel = document.getElementById("resultsPanel");
+    if (!resultsPanel || !resultsPanel.classList.contains("active-panel")) return;
+    if (!["ArrowUp","ArrowDown"," "].includes(e.key)) return;
+    e.preventDefault();
+    const rows = document.querySelectorAll("#resultsBody tr");
+    if (!rows.length) return;
+    let idx = Array.from(rows).findIndex(r => r.classList.contains("kbd-focus"));
+    if (idx < 0) idx = 0;
+
+    if (e.key === "ArrowDown") idx = Math.min(idx + 1, rows.length - 1);
+    else if (e.key === "ArrowUp") idx = Math.max(idx - 1, 0);
+    else if (e.key === " ") {
+        const cb = rows[idx]?.querySelector(".row-checkbox");
+        if (cb) { cb.checked = !cb.checked; updateSelectAllCheckbox(); }
+        return;
+    }
+
+    rows.forEach(r => r.classList.remove("kbd-focus"));
+    rows[idx].classList.add("kbd-focus");
+    rows[idx].scrollIntoView({ block: "nearest" });
+});
+
+// ─── Auto-refresh when new numbers captured ───────────────────
 chrome.storage.onChanged.addListener(function(changes, ns) {
     if (ns !== "local") return;
     if (changes.capturedNumbers && changes.capturedNumbers.newValue) {
-        var newNums = changes.capturedNumbers.newValue;
+        const newNums = changes.capturedNumbers.newValue;
         if (newNums.length && JSON.stringify(newNums) !== JSON.stringify(capturedNumbers)) {
             capturedNumbers = newNums;
             originalCapturedNumbers = newNums.slice();

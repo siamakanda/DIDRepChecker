@@ -1,12 +1,12 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "did_intel"
 version = "2.0.0"
 description = "Phone number reputation intelligence for VoIP professionals"
-readme = "../README.md"
+readme = "README.md"
 license = {text = "MIT"}
 authors = [
     {name = "Siam", email = "siam@example.com"}
@@ -43,5 +43,16 @@ didintel-server = "did_intel.api:main"
 Homepage = "https://github.com/siamakanda/DIDRepChecker"
 Repository = "https://github.com/siamakanda/DIDRepChecker"
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "httpx>=0.24",
+]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["did_intel*"]
