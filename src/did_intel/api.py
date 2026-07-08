@@ -254,7 +254,7 @@ async def prometheus_metrics():
 
 
 def main():
-    """Entry point for `didintel-server` console script."""
+    """Entry point for `didrepchecker-server` console script."""
     import uvicorn
     from did_intel.config import get_config
     cfg = get_config()

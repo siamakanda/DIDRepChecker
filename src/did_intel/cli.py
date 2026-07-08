@@ -146,11 +146,11 @@ class DIDScraperCLI:
                         self.stats['positive'] += 1
                     elif rep == 'Negative':
                         self.stats['negative'] += 1
-                    elif rep in ('Error', 'Timeout', 'Blocked', 'HTTP 429', 'HTTP 403', 'HTTP 404', 'Parse Error'):
+                    elif rep in ('Not Found', 'No Data Available', 'Invalid Page', 'Neutral', 'Unknown'):
+                        self.stats['other'] += 1
+                    else:
                         self.stats['errors'] += 1
                         self.failed_numbers.append(phone_number)
-                    else:
-                        self.stats['other'] += 1
 
                     progress.update(
                         task,

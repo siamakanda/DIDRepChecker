@@ -4,6 +4,8 @@ Can be used as a library, from CLI, or from an API.
 """
 
 import asyncio
+import concurrent.futures
+import threading
 import aiohttp
 import random
 import time
@@ -374,7 +376,27 @@ class RoboKillerScraper:
             finally:
                 await self.close()
 
-        # Since this is a sync wrapper, we can safely run a new event loop.
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+
+        if running is not None:
+            future = concurrent.futures.Future()
+            def _thread():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(_run())
+                    future.set_result(result)
+                except Exception as exc:
+                    future.set_exception(exc)
+                finally:
+                    loop.close()
+            thread = threading.Thread(target=_thread, daemon=True)
+            thread.start()
+            return future.result()
+
         return asyncio.run(_run())
 
 
@@ -392,4 +414,4 @@ def scrape_numbers_sync(phone_numbers: List[str],
         _legacy_scraper = RoboKillerScraper()
     return _legacy_scraper.scrape(phone_numbers, progress_callback)
 
-__all__ = ["RoboKillerScraper", "clean_number", "scrape_numbers_sync", "DEFAULT_CONFIG"]
+__all__ = ["RoboKillerScraper", "scrape_numbers_sync", "DEFAULT_CONFIG"]
