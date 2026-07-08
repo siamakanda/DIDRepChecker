@@ -59,9 +59,10 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------
 # Helper functions (stateless)
 # ----------------------------------------------------------------------
-def get_random_headers() -> Dict[str, str]:
+def get_random_headers(config: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     """Generate random HTTP headers for anti‑detection."""
-    user_agent = random.choice(USER_AGENTS)
+    cfg = config or DEFAULT_CONFIG
+    user_agent = random.choice(USER_AGENTS) if cfg.get("rotate_user_agents", True) else USER_AGENTS[0]
     browser_type = "Chrome"
     if "Firefox" in user_agent:
         browser_type = "Firefox"
@@ -74,10 +75,10 @@ def get_random_headers() -> Dict[str, str]:
         "Accept-Language": accept_language,
         "Accept-Encoding": "gzip, deflate, br",
         "User-Agent": user_agent,
-        "DNT": random.choice(["0", "1"]),
+        "DNT": random.choice(["0", "1"]) if cfg.get("rotate_headers", True) else "1",
         "Connection": "keep-alive",
     }
-    if random.random() > DEFAULT_CONFIG["referer_chance"]:
+    if random.random() > cfg.get("referer_chance", 0.5):
         headers["Referer"] = random.choice(REFERER_SOURCES)
     return headers
 
@@ -249,7 +250,7 @@ class RoboKillerScraper:
             await self.rate_limiter.acquire()
             formatted = f"{phone_number[:3]}-{phone_number[3:6]}-{phone_number[6:]}"
             url = f"{self.config['base_url']}/p/{formatted}"
-            headers = get_random_headers()
+            headers = get_random_headers(self.config)
             timeout = aiohttp.ClientTimeout(
                 total=self.config["timeout"],
                 connect=self.config["connect_timeout"],

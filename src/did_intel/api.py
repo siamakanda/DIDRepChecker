@@ -211,8 +211,6 @@ async def scrape_numbers(
         metrics.inc("scrape_requests")
         results = await scraper.scrape_async(request.numbers)
         metrics.inc("numbers_scraped", len(request.numbers))
-        cache_hits = sum(1 for r in results if r.get("reputation") not in ("Error", "Blocked", "Timeout", "ConnectionError"))
-        metrics.inc("cache_hits", cache_hits)
         return results
     except HTTPException:
         raise

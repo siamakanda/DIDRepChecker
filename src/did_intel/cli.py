@@ -212,10 +212,17 @@ class DIDScraperCLI:
 
         successful_old = [r for r in old_results if r['phone_number'] not in old_failed]
         self.results = successful_old + self.results
-        self.stats['positive'] = sum(1 for r in self.results if r.get('reputation') == 'Positive')
-        self.stats['negative'] = sum(1 for r in self.results if r.get('reputation') == 'Negative')
-        self.stats['errors'] = sum(1 for r in self.results if r.get('reputation') in ('Error', 'Timeout', 'Blocked', 'HTTP 429', 'HTTP 403', 'Parse Error'))
-        self.stats['other'] = len(self.results) - self.stats['positive'] - self.stats['negative'] - self.stats['errors']
+        self.stats = {"positive": 0, "negative": 0, "other": 0, "errors": 0}
+        for r in self.results:
+            rep = r.get('reputation', '')
+            if rep == 'Positive':
+                self.stats['positive'] += 1
+            elif rep == 'Negative':
+                self.stats['negative'] += 1
+            elif rep in ('Not Found', 'No Data Available', 'Invalid Page', 'Neutral', 'Unknown'):
+                self.stats['other'] += 1
+            else:
+                self.stats['errors'] += 1
 
         console.print("\n[bold green]✅ Retry completed. Updated summary:[/bold green]")
         self._show_summary()
