@@ -52,6 +52,8 @@ DEFAULTS: Dict[str, Any] = {
 # ---------------------------------------------------------------------------
 def _get_project_root() -> Path:
     """Return the directory containing config.json / pyproject.toml."""
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent
     return Path(__file__).resolve().parent.parent.parent
 
 
