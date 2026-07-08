@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
 
-ROOT = Path(SPECPATH).resolve().parent.parent.parent
+ROOT = Path(os.getcwd()).resolve()
 
 block_cipher = None
 
