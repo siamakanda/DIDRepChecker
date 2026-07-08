@@ -84,16 +84,21 @@ def call_api(api_url: str, numbers: List[str], api_key: Optional[str] = None) ->
     headers = {}
     if api_key:
         headers["X-API-Key"] = api_key
-    try:
+
+    response = None
+    if RICH_AVAILABLE:
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             transient=True,
-            disable=not RICH_AVAILABLE,
         ) as progress:
             task = progress.add_task("[cyan]Sending request...", total=None)
             response = requests.post(api_url, json=payload, headers=headers, timeout=60)
             progress.update(task, completed=True)
+    else:
+        response = requests.post(api_url, json=payload, headers=headers, timeout=60)
+
+    try:
         response.raise_for_status()
         return response.json()
     except requests.exceptions.ConnectionError:
@@ -102,8 +107,8 @@ def call_api(api_url: str, numbers: List[str], api_key: Optional[str] = None) ->
     except requests.exceptions.Timeout:
         print("Error: Request timed out.")
         return None
-    except requests.exceptions.HTTPError as e:
-        print(f"HTTP error: {e}")
+    except requests.exceptions.HTTPError:
+        print(f"HTTP error: {response.status_code}")
         if response.status_code == 401:
             print("Authentication required. Provide an API key with --api-key.")
         elif response.status_code == 403:

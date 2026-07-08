@@ -349,7 +349,6 @@ function renderResultsTable() {
     updateSummaryBar();
     updateScrapedAge();
 }
-}
 
 function updateSelectAllCheckbox() {
     const allCheckboxes = document.querySelectorAll('.row-checkbox');
@@ -388,25 +387,8 @@ function updateScrapedAge() {
     else if (mins < 60) el.innerText = mins + "m ago";
     else el.innerText = Math.round(mins / 60) + "h ago";
 }
-    let filtered = [...apiResults];
-    if (currentFilter !== "all") {
-        filtered = filtered.filter(r => r.reputation === currentFilter);
-    }
-    filtered.sort((a,b) => {
-        let aVal = a[currentSortField];
-        let bVal = b[currentSortField];
-        if (currentSortField === "total_calls" || currentSortField === "user_reports") {
-            aVal = parseInt(aVal) || 0;
-            bVal = parseInt(bVal) || 0;
-        }
-        if (aVal < bVal) return currentSortAsc ? -1 : 1;
-        if (aVal > bVal) return currentSortAsc ? 1 : -1;
-        return 0;
-    });
-    return filtered.slice(0, n).map(r => r.phone_number);
-}
 
-function getCheckedNumbersFromResults() {
+function getTopResultsNumbers(n) {
     const checkboxes = document.querySelectorAll('.row-checkbox:checked');
     return Array.from(checkboxes).map(cb => cb.dataset.number);
 }

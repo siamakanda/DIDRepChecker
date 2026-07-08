@@ -2,6 +2,7 @@
 
 let apiUrls = ["http://localhost:8000/scrape"];
 let apiKey = "";
+let activeAbortController = null;
 
 // Load stored data
 chrome.storage.local.get(["apiUrls", "apiKey"], (result) => {
@@ -88,25 +89,45 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ key: apiKey });
         return true;
     }
+    else if (request.action === "cancelReputationCheck") {
+        if (activeAbortController) {
+            activeAbortController.abort();
+            activeAbortController = null;
+        }
+        chrome.storage.local.set({ apiState: { status: "cancelled", progress: 0, total: 0, error: null } });
+        sendResponse({ success: true });
+        return true;
+    }
 });
 
 async function callApiInChunks(numbers, isAppend = false) {
     const CHUNK_SIZE = 100;
     let accumulatedResults = [];
     
+    if (activeAbortController) activeAbortController.abort();
+    activeAbortController = new AbortController();
+    const abortSignal = activeAbortController.signal;
+    
     if (isAppend) {
-        // Retrieve current results and filter out the numbers we are retrying
         const res = await chrome.storage.local.get(["apiResults"]);
         accumulatedResults = res.apiResults || [];
         accumulatedResults = accumulatedResults.filter(r => !numbers.includes(r.phone_number));
     }
     
     for (let i = 0; i < numbers.length; i += CHUNK_SIZE) {
+        if (abortSignal.aborted) {
+            await chrome.storage.local.set({ apiState: { status: "cancelled", error: null } });
+            return;
+        }
         const chunk = numbers.slice(i, i + CHUNK_SIZE);
         let chunkSuccess = false;
         let lastError = null;
         
         for (let url of apiUrls) {
+            if (abortSignal.aborted) {
+                await chrome.storage.local.set({ apiState: { status: "cancelled", error: null } });
+                return;
+            }
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 120000);
