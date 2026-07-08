@@ -238,8 +238,10 @@ async function callReputationApi(numbers, description = "numbers") {
     lastSentCount = numbers.length;
     showProgress(true);
     apiStatus.innerText = `Checking reputation for ${numbers.length} ${description}...`;
-    resultsPlaceholder.style.display = "block";
-    resultsContent.style.display = "none";
+    if (!apiResults.length) {
+        resultsPlaceholder.style.display = "block";
+        resultsContent.style.display = "none";
+    }
     try {
         await chrome.runtime.sendMessage({ action: "startReputationCheck", numbers: numbers });
     } catch (err) {
@@ -688,6 +690,9 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
                     showProgress(false);
                     const count = apiResults.length;
                     setApiStatusText(`✅ Checked ${count} numbers.`);
+                } else if (state.status === "cancelled") {
+                    showProgress(false);
+                    setApiStatusText("⚠️ Check cancelled.");
                 } else if (state.status === "error") {
                     showProgress(false);
                     setApiStatusText(`❌ API error: ${state.error}`);
