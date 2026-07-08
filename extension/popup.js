@@ -389,6 +389,25 @@ function updateScrapedAge() {
 }
 
 function getTopResultsNumbers(n) {
+    let filtered = [...apiResults];
+    if (currentFilter !== "all") {
+        filtered = filtered.filter(r => r.reputation === currentFilter);
+    }
+    filtered.sort((a,b) => {
+        let aVal = a[currentSortField];
+        let bVal = b[currentSortField];
+        if (currentSortField === "total_calls" || currentSortField === "user_reports") {
+            aVal = parseInt(aVal) || 0;
+            bVal = parseInt(bVal) || 0;
+        }
+        if (aVal < bVal) return currentSortAsc ? -1 : 1;
+        if (aVal > bVal) return currentSortAsc ? 1 : -1;
+        return 0;
+    });
+    return filtered.slice(0, n).map(r => r.phone_number);
+}
+
+function getCheckedNumbersFromResults() {
     const checkboxes = document.querySelectorAll('.row-checkbox:checked');
     return Array.from(checkboxes).map(cb => cb.dataset.number);
 }
@@ -460,9 +479,14 @@ function exportResultsCSV() {
         apiStatus.innerText = "No results to export.";
         return;
     }
-    const headers = ["phone_number","reputation","robokiller_status","total_calls","user_reports","last_call","scraped_at"];
-    const rows = apiResults.map(r => headers.map(h => r[h] || "").join(","));
-    const csv = [headers.join(","), ...rows].join("\n");
+    const headerRow = ["phone_number","reputation","robokiller_status","total_calls","user_reports","last_call","scraped_at"];
+    const rows = apiResults.map(r =>
+        headerRow.map(h => {
+            const val = (r[h] || "").toString();
+            return /[",\n]/.test(val) ? '"' + val.replace(/"/g, '""') + '"' : val;
+        }).join(",")
+    );
+    const csv = [headerRow.join(","), ...rows].join("\n");
     const blob = new Blob([csv], {type: "text/csv"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -852,9 +876,7 @@ document.querySelectorAll("#resultsTable th.sortable").forEach(th => {
 const cancelScrapeBtn = document.getElementById("cancelScrapeBtn");
 if (cancelScrapeBtn) {
     cancelScrapeBtn.addEventListener("click", async () => {
-        await chrome.storage.local.set({
-            apiState: { status: "cancelled", progress: 0, total: 0, error: "Cancelled by user" }
-        });
+        await chrome.runtime.sendMessage({ action: "cancelReputationCheck" });
         showProgress(false);
         setApiStatusText("Scrape cancelled.");
         updateProgressBar(0);
