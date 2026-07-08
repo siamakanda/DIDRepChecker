@@ -1,163 +1,59 @@
 # install.ps1
-# DID Intel — One-command Windows installer
+# DIDRepChecker - Windows installer
+# Run from the project root directory.
 #
-# Usage (PowerShell as Administrator):
-#   Set-ExecutionPolicy Bypass -Scope Process -Force
-#   iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/siamakanda/DIDRepChecker/main/deploy/windows/install.ps1'))
-#
-# Installs into %LOCALAPPDATA%\did-intel
+#   powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1
 
-param(
-    [string]$RepoUrl = "https://github.com/siamakanda/DIDRepChecker.git",
-    [string]$Branch = "main"
-)
+$ErrorActionPreference = "Stop"
 
-$InstallDir = "$env:LOCALAPPDATA\did-intel"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ProjectRoot = Resolve-Path "$ScriptDir\..\.."
 
 Write-Host ""
 Write-Host "=======================================" -ForegroundColor Cyan
-Write-Host "  DID Intel — Windows Installer" -ForegroundColor Cyan
+Write-Host "  DIDRepChecker - Windows Installer" -ForegroundColor Cyan
 Write-Host "=======================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "  Install directory : $InstallDir" -ForegroundColor Yellow
+Write-Host "  Project : $ProjectRoot" -ForegroundColor Yellow
 Write-Host ""
 
-# --- Check Python version (requires 3.9+) ---
-try {
-    $pyVersion = python --version 2>&1
-    if ($pyVersion -match "Python 3\.(\d+)") {
-        $minor = [int]$Matches[1]
-        if ($minor -lt 9) {
-            Write-Host "Python 3.9 or higher is required. Found: $pyVersion" -ForegroundColor Red
-            exit 1
-        }
-    } else {
-        Write-Host "Could not determine Python version. Ensure Python 3.9+ is installed." -ForegroundColor Yellow
-    }
-} catch {
-    Write-Host "Python not found. Please install Python 3.9+ from https://python.org" -ForegroundColor Red
+$py = Get-Command python -ErrorAction SilentlyContinue
+if (-not $py) {
+    Write-Host "ERROR: Python 3.9+ required. Install from https://python.org" -ForegroundColor Red
     exit 1
 }
+$ver = & python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+$parts = $ver.Split('.')
+$major = [int]$parts[0]
+$minor = [int]$parts[1]
+if ($major -lt 3 -or ($major -eq 3 -and $minor -lt 9)) {
+    Write-Host "ERROR: Python 3.9+ required. Found: $ver" -ForegroundColor Red
+    exit 1
+}
+Write-Host "[OK] Python $ver" -ForegroundColor Green
 
-# --- Helper: Install Git if missing ---
-if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Host "Git not found. Installing Git for Windows..." -ForegroundColor Yellow
-    $gitInstaller = "$env:TEMP\GitInstaller.exe"
-    $gitUrl = "https://github.com/git-for-windows/git/releases/download/v2.45.2.windows.1/Git-2.45.2-64-bit.exe"
-    Invoke-WebRequest -Uri $gitUrl -OutFile $gitInstaller
-    Start-Process -FilePath $gitInstaller -ArgumentList "/VERYSILENT /NORESTART" -Wait
-    Remove-Item $gitInstaller
-    # Refresh environment variables
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-}
+Push-Location $ProjectRoot
 
-# --- Handle existing installation directory ---
-if (Test-Path $InstallDir) {
-    if (Test-Path "$InstallDir\.git") {
-        Write-Host "Repository already exists. Pulling latest changes..." -ForegroundColor Yellow
-        Push-Location $InstallDir
-        git pull origin $Branch
-        Pop-Location
-    } else {
-        Write-Host "Directory exists but is not a git repository." -ForegroundColor Yellow
-        $choice = Read-Host "Do you want to remove it and clone fresh? (y/n)"
-        if ($choice -eq 'y') {
-            Write-Host "Removing existing directory..." -ForegroundColor Yellow
-            Remove-Item -Recurse -Force $InstallDir -ErrorAction SilentlyContinue
-        } else {
-            Write-Host "Using existing files (no update)." -ForegroundColor Yellow
-        }
-    }
+Write-Host "Creating virtual environment..." -ForegroundColor Yellow
+if (Test-Path venv) {
+    Remove-Item -Recurse -Force venv
 }
+& python -m venv venv
 
-# --- Clone repository if needed ---
-if (-not (Test-Path $InstallDir)) {
-    Write-Host "Cloning repository..." -ForegroundColor Yellow
-    git clone --branch $Branch $RepoUrl $InstallDir
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: Failed to clone repository. Please check the URL and network." -ForegroundColor Red
-        exit 1
-    }
-}
+Write-Host "Installing build tools..." -ForegroundColor Yellow
+& "venv\Scripts\python.exe" -m pip install --upgrade pip setuptools wheel -q
 
-# Change to the installation directory
-Set-Location $InstallDir
+Write-Host "Installing package and dependencies..." -ForegroundColor Yellow
+& "venv\Scripts\pip.exe" install -r requirements.txt -q
+& "venv\Scripts\pip.exe" install . -q
 
-# --- Virtual environment: remove if corrupted, else create ---
-$venvDir = "$InstallDir\venv"
-if (Test-Path $venvDir) {
-    $activateScript = "$venvDir\Scripts\Activate.ps1"
-    if (-not (Test-Path $activateScript)) {
-        Write-Host "Virtual environment is incomplete. Removing it..." -ForegroundColor Yellow
-        Remove-Item -Recurse -Force $venvDir
-    }
-}
-if (-not (Test-Path $venvDir)) {
-    Write-Host "Creating virtual environment..." -ForegroundColor Yellow
-    python -m venv $venvDir
-    if (-not (Test-Path "$venvDir\Scripts\Activate.ps1")) {
-        Write-Host "ERROR: Failed to create virtual environment." -ForegroundColor Red
-        exit 1
-    }
-}
-
-# --- Activate and install dependencies ---
-Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
-& "$venvDir\Scripts\Activate.ps1"
-python -m pip install --upgrade pip
-if (Test-Path "$InstallDir\requirements.txt") {
-    pip install -r "$InstallDir\requirements.txt"
-} else {
-    Write-Host "requirements.txt not found. Installing core packages..." -ForegroundColor Yellow
-    pip install fastapi uvicorn aiohttp lxml aiosqlite pyperclip
-}
-
-if (Test-Path "$InstallDir\src") {
-    pip install -e "$InstallDir"
-} else {
-    Write-Host "src/ directory not found. The did_intel package may not be importable." -ForegroundColor Yellow
-}
-
-# --- Create default config.json if missing ---
-$configFile = "$InstallDir\config.json"
-if (-not (Test-Path $configFile)) {
-    Write-Host "Creating default config.json..." -ForegroundColor Yellow
-    @"
-{
-    "cache_ttl_days": 3,
-    "concurrent_requests": 30,
-    "requests_per_second": 5,
-    "api_host": "0.0.0.0",
-    "api_port": 8000
-}
-"@ | Out-File -Encoding utf8 -FilePath $configFile
-}
+Pop-Location
 
 Write-Host ""
 Write-Host "=======================================" -ForegroundColor Green
-Write-Host "  DID Intel installation complete!"
+Write-Host "  DIDRepChecker installed successfully!" -ForegroundColor Green
 Write-Host "=======================================" -ForegroundColor Green
+Write-Host "  Location : $ProjectRoot"
 Write-Host ""
-Write-Host "  Install location : $InstallDir"
-Write-Host "  Config file      : $configFile"
-Write-Host ""
-
-# --- Prompt to start the server ---
-$runScript = Join-Path $InstallDir "deploy\windows\run.bat"
-if (Test-Path $runScript) {
-    $startNow = Read-Host "Do you want to start the server now? (Y/N)"
-    if ($startNow -eq 'Y' -or $startNow -eq 'y') {
-        Write-Host "Starting server in a new window..." -ForegroundColor Yellow
-        Start-Process -FilePath $runScript -WindowStyle Normal -WorkingDirectory $InstallDir
-        Write-Host "Server window opened. You can close it to stop the server." -ForegroundColor Green
-    } else {
-        Write-Host "To start the server later: $runScript" -ForegroundColor Cyan
-    }
-} else {
-    Write-Host "To start the server manually:" -ForegroundColor Cyan
-    Write-Host "  cd $InstallDir" -ForegroundColor Cyan
-    Write-Host "  .\venv\Scripts\activate" -ForegroundColor Cyan
-    Write-Host "  pip install -e ." -ForegroundColor Cyan
-    Write-Host "  uvicorn did_intel.api:app --host 0.0.0.0 --port 8000" -ForegroundColor Cyan
-}
+Write-Host "  To start the server:"
+Write-Host "    $ProjectRoot\deploy\windows\run.bat"
 Write-Host ""

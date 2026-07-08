@@ -1,41 +1,39 @@
 @echo off
-REM Run from the project root (parent of deploy/windows)
-cd /d "%~dp0..\.."
+setlocal enabledelayedexpansion
 
-REM Check if virtual environment exists
-if not exist "venv" (
-    echo Virtual environment not found. Please run deploy\windows\install.ps1 first.
+REM Move to project root (parent of deploy/windows)
+cd /d "%~dp0..\.." 2>nul || (
+    echo ERROR: Cannot find project root.
     pause
     exit /b 1
 )
 
-REM Activate virtual environment
-call venv\Scripts\activate.bat
+REM Check virtual environment
+if not exist "venv\Scripts\python.exe" (
+    echo Virtual environment not found. Run: deploy\windows\install.ps1
+    pause
+    exit /b 1
+)
+
+REM Activate
+call venv\Scripts\activate.bat >nul 2>&1
 if errorlevel 1 (
-    echo Failed to activate virtual environment.
+    echo ERROR: Failed to activate virtual environment.
     pause
     exit /b 1
 )
 
-REM Read host/port from config or fall back to defaults
-for /f "usebackq tokens=1,2 delims=:" %%a in (`python -c "from did_intel.config import get_config; c=get_config(); print(f\"{c.get('api_host','0.0.0.0')}:{c.get('api_port',8000)}\")"`) do (
-    set API_HOST=%%a
-    set API_PORT=%%b
+echo.
+echo  DIDRepChecker API Server
+echo  http://localhost:8000
+echo  Docs: http://localhost:8000/docs
+echo  Press Ctrl+C to stop.
+echo.
+
+python -m uvicorn did_intel.api:app --host 0.0.0.0 --port 8000
+
+if errorlevel 1 (
+    echo.
+    echo Server stopped with error.
+    pause
 )
-if "%API_HOST%"=="" set API_HOST=0.0.0.0
-if "%API_PORT%"=="" set API_PORT=8000
-
-echo.
-echo =======================================
-echo   DID Intel API Server
-echo =======================================
-echo.
-echo Starting FastAPI server on http://%API_HOST%:%API_PORT%
-echo API docs available at http://%API_HOST%:%API_PORT%/docs
-echo Press Ctrl+C to stop the server.
-echo.
-
-REM Use didintel-server (reads config for host/port)
-didintel-server
-
-pause
