@@ -34,7 +34,6 @@ play.py
 # Logs & env
 *.log
 .env
-*.spec
 
 # Test artifacts
 .pytest_cache/
