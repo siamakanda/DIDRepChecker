@@ -14,8 +14,8 @@ def test_health():
 def test_metrics():
     response = client.get("/metrics")
     assert response.status_code == 200
-    assert "didintel_uptime_seconds" in response.text
-    assert "didintel_requests_total" in response.text
+    assert "didrepchecker_uptime_seconds" in response.text
+    assert "didrepchecker_requests_total" in response.text
 
 
 def test_scrape_empty_numbers():

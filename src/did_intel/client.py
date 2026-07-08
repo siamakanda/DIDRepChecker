@@ -20,8 +20,8 @@ try:
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
-    # Fallback to simple print
     Console = None
+    Progress = None
 
 console = Console() if RICH_AVAILABLE else None
 
@@ -172,7 +172,7 @@ def display_results(results: List[Dict]):
 # Main
 # ----------------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="Client for DID Intel Reputation API")
+    parser = argparse.ArgumentParser(description="Client for DIDRepChecker Reputation API")
     parser.add_argument("-n", "--numbers", help="Phone numbers (comma/space separated)")
     parser.add_argument("-f", "--file", help="Input file (CSV or text)")
     parser.add_argument("-u", "--url", default="http://localhost:8000/scrape", help="API endpoint URL")

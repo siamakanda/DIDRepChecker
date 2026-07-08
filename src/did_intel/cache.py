@@ -14,24 +14,21 @@ class ReputationCache:
     def __init__(self, db_path: str = None, ttl_seconds: int = 86400):
         self.ttl_seconds = ttl_seconds
         self._initialized = False
+        self._memory_conn: Optional[aiosqlite.Connection] = None
 
         if db_path is not None:
             self.db_path = db_path
             logger.info(f"Using user-provided cache path: {self.db_path}")
             return
 
-        # Determine OS-specific cache directory
         if sys.platform == "win32":
             base_dir = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
             cache_dir = base_dir / "DIDRepChecker"
         else:
-            # Linux, macOS, etc.
             cache_dir = Path.home() / ".cache" / "DIDRepChecker"
 
-        # Ensure the directory exists
         try:
             cache_dir.mkdir(parents=True, exist_ok=True)
-            # Test write access
             test_file = cache_dir / ".write_test"
             test_file.touch()
             test_file.unlink()
@@ -42,32 +39,19 @@ class ReputationCache:
             self.db_path = ":memory:"
             logger.info("Using in-memory cache (no persistence across restarts).")
 
+    async def _get_db(self) -> aiosqlite.Connection:
+        if self.db_path == ":memory:":
+            if self._memory_conn is None:
+                self._memory_conn = await aiosqlite.connect(":memory:")
+            return self._memory_conn
+        return await aiosqlite.connect(self.db_path)
+
     async def _init_db(self):
-        """Create the database and tables if they don't exist."""
         if self._initialized:
             return
 
-        if self.db_path == ":memory:":
-            async with aiosqlite.connect(self.db_path) as db:
-                await db.execute('''
-                    CREATE TABLE IF NOT EXISTS reputation (
-                        phone_number TEXT PRIMARY KEY,
-                        reputation TEXT,
-                        robokiller_status TEXT,
-                        user_reports TEXT,
-                        total_calls TEXT,
-                        last_call TEXT,
-                        scraped_at TEXT,
-                        timestamp REAL
-                    )
-                ''')
-                await db.commit()
-            self._initialized = True
-            return
-
-        # File-based database
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        async with aiosqlite.connect(self.db_path) as db:
+        db = await self._get_db()
+        try:
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS reputation (
                     phone_number TEXT PRIMARY KEY,
@@ -81,6 +65,10 @@ class ReputationCache:
                 )
             ''')
             await db.commit()
+        finally:
+            if self.db_path != ":memory:":
+                await db.close()
+
         self._initialized = True
 
     async def get_uncached(self, numbers: List[str]) -> Tuple[Dict[str, Dict[str, str]], List[str]]:
@@ -93,7 +81,8 @@ class ReputationCache:
         numbers_to_scrape = []
 
         try:
-            async with aiosqlite.connect(self.db_path) as db:
+            db = await self._get_db()
+            try:
                 chunk_size = 900
                 for i in range(0, len(numbers), chunk_size):
                     chunk = numbers[i:i + chunk_size]
@@ -112,6 +101,10 @@ class ReputationCache:
                                     "last_call": row[5],
                                     "scraped_at": row[6]
                                 }
+            finally:
+                if self.db_path != ":memory:":
+                    await db.close()
+
             for num in numbers:
                 if num not in cached_results:
                     numbers_to_scrape.append(num)
@@ -141,13 +134,17 @@ class ReputationCache:
             ))
 
         try:
-            async with aiosqlite.connect(self.db_path) as db:
+            db = await self._get_db()
+            try:
                 await db.executemany('''
                     INSERT OR REPLACE INTO reputation 
                     (phone_number, reputation, robokiller_status, user_reports, total_calls, last_call, scraped_at, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ''', rows)
                 await db.commit()
+            finally:
+                if self.db_path != ":memory:":
+                    await db.close()
         except Exception as e:
             logger.error(f"Cache write error: {e}")
 
@@ -155,11 +152,29 @@ class ReputationCache:
         await self._init_db()
         current_time = time.time()
         try:
-            async with aiosqlite.connect(self.db_path) as db:
+            db = await self._get_db()
+            try:
                 await db.execute('''
                     DELETE FROM reputation 
                     WHERE ? - timestamp > ?
                 ''', (current_time, self.ttl_seconds))
+                await db.execute('''
+                    DELETE FROM reputation
+                    WHERE rowid NOT IN (
+                        SELECT rowid FROM reputation
+                        ORDER BY timestamp DESC
+                        LIMIT 50000
+                    )
+                ''')
                 await db.commit()
+            finally:
+                if self.db_path != ":memory:":
+                    await db.close()
         except Exception as e:
             logger.error(f"Cache cleanup error: {e}")
+
+    async def close(self):
+        if self._memory_conn is not None:
+            await self._memory_conn.close()
+            self._memory_conn = None
+            self._initialized = False

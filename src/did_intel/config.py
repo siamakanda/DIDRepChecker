@@ -52,7 +52,7 @@ DEFAULTS: Dict[str, Any] = {
 # ---------------------------------------------------------------------------
 def _get_project_root() -> Path:
     """Return the directory containing config.json / pyproject.toml."""
-    return Path(__file__).resolve().parent.parent
+    return Path(__file__).resolve().parent.parent.parent
 
 
 def _get_user_config_dir() -> Path:

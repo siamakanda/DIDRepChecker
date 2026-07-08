@@ -1,7 +1,6 @@
 """
-FastAPI server for DID Intel
+FastAPI server for DIDRepChecker
 Provides a /scrape endpoint that returns reputation data for a list of phone numbers.
-Supports optional API key authentication.
 """
 
 from fastapi import FastAPI, HTTPException, Depends, Security, Request
@@ -88,8 +87,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutdown complete")
 
 app = FastAPI(
-    title="DID Reputation API",
-    description="Returns reputation, total calls, user reports, and last call for phone numbers.",
+    title="DIDRepChecker API",
+    description="Bulk phone number reputation lookup via RoboKiller.",
     version="2.0.0",
     lifespan=lifespan
 )

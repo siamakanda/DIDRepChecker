@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "did_intel"
 version = "2.0.0"
-description = "Phone number reputation intelligence for VoIP professionals"
+description = "Phone number reputation checking for VoIP professionals"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
@@ -36,8 +36,8 @@ dependencies = [
 ]
 
 [project.scripts]
-didintel = "did_intel.cli:main"
-didintel-server = "did_intel.api:main"
+didrepchecker = "did_intel.cli:main"
+didrepchecker-server = "did_intel.api:main"
 
 [project.urls]
 Homepage = "https://github.com/siamakanda/DIDRepChecker"

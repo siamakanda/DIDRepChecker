@@ -40,3 +40,6 @@ play.py
 .pytest_cache/
 htmlcov/
 .coverage
+
+# AI
+.commandcode/

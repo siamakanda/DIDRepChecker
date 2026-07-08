@@ -30,7 +30,8 @@ try:
 except ImportError:
     CLIPBOARD_AVAILABLE = False
 
-from did_intel.scraper import RoboKillerScraper, clean_number
+from did_intel.scraper import RoboKillerScraper
+from did_intel.utils import clean_number
 from did_intel.cache import ReputationCache
 from did_intel.config import get_config
 
