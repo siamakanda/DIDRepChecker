@@ -1,8 +1,8 @@
 """
-Centralized configuration for DID Intel.
+Centralized configuration for DIDRepChecker.
 
 Reads from, in order of precedence:
-    1. Environment variables (DIDINTEL_*)
+    1. Environment variables (DIDRCK_*)
     2. config.json in the project root or user config directory
     3. Hard-coded defaults below
 """
@@ -88,8 +88,8 @@ def _load_json(path: Path) -> Dict[str, Any]:
 
 
 def _env_override(key: str, value: Any) -> Any:
-    """Check for DIDINTEL_<KEY> env var and override if present."""
-    env_key = f"DIDINTEL_{key.upper()}"
+    """Check for DIDRCK_<KEY> env var and override if present."""
+    env_key = f"DIDRCK_{key.upper()}"
     env_val = os.environ.get(env_key)
     if env_val is None:
         return value

@@ -1,5 +1,5 @@
 """
-DID Intel — Phone number reputation intelligence for VoIP professionals.
+DIDRepChecker — Phone number reputation checking for VoIP professionals.
 
 Core modules:
     - scraper: Async RoboKiller scraper engine
