@@ -528,6 +528,12 @@ function renderApiUrls(urls) {
 
 // ─── Test Connection ─────────────────────────────────────────────
 const testConnectionBtn = document.getElementById("testConnectionBtn");
+if (testConnectionBtn) {
+    testConnectionBtn.addEventListener("click", async () => {
+        await refreshServerInfo();
+        refreshCacheInfo();
+    });
+}
 
 function exportResultsCSV() {
     if (!apiResults.length) {
@@ -940,15 +946,6 @@ if (cancelScrapeBtn) {
         updateProgressBar(0);
         const pc = document.getElementById("progressCount");
         if (pc) pc.innerText = "";
-    });
-}
-
-// ─── Test Connection ─────────────────────────────────────────────
-const testConnectionBtn = document.getElementById("testConnectionBtn");
-if (testConnectionBtn) {
-    testConnectionBtn.addEventListener("click", async () => {
-        await refreshServerInfo();
-        refreshCacheInfo();
     });
 }
 
