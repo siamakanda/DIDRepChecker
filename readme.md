@@ -5,9 +5,9 @@ Chrome extension + local API to check phone number reputations via RoboKiller an
 ## What's Inside
 
 - **Chrome Extension** — Captures DIDs from the Peerless API, checks reputation via the local server, displays sortable/filterable results, and auto-selects checkboxes on the page.
-- **API Server** — FastAPI backend with async RoboKiller scraper, SQLite cache, rate limiting, and Prometheus metrics.
+- **API Server** — FastAPI backend with async RoboKiller scraper, SQLite cache, rate limiting.
 - **CLI Tool** — Batch processing, interactive mode, CSV/JSON export, clipboard copy.
-- **Deployment Scripts** — One-command install for Windows and Linux.
+- **Deployment Scripts** — One-command install for Windows.
 
 ## Quick Start
 
@@ -60,8 +60,6 @@ The API is at `http://localhost:8000`. Docs at `http://localhost:8000/docs`.
 
 **GET `/health`** — Health check.
 
-**GET `/metrics`** — Prometheus metrics.
-
 ## Configuration
 
 `config.json` in the project root (optional — defaults are fine):
@@ -111,9 +109,8 @@ DIDRepChecker/
 │   ├── cli.py           # CLI tool
 │   ├── client.py        # API client
 │   ├── config.py        # Config management
-│   ├── metrics.py       # Prometheus metrics
 │   └── utils.py         # Shared utilities
-├── deploy/              # Install/uninstall scripts
+├── deploy/windows/      # Install/uninstall scripts
 ├── tests/               # Test suite
 ├── pyproject.toml
 └── config.example.json
