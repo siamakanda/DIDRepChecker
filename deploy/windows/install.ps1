@@ -43,7 +43,6 @@ Write-Host "Installing build tools..." -ForegroundColor Yellow
 & "venv\Scripts\python.exe" -m pip install --upgrade pip setuptools wheel -q
 
 Write-Host "Installing package and dependencies..." -ForegroundColor Yellow
-& "venv\Scripts\pip.exe" install -r requirements.txt -q
 & "venv\Scripts\pip.exe" install . -q
 
 Pop-Location

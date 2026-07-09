@@ -11,11 +11,9 @@ def test_health():
     assert response.json() == {"status": "healthy"}
 
 
-def test_metrics():
+def test_metrics_removed():
     response = client.get("/metrics")
-    assert response.status_code == 200
-    assert "didrepchecker_uptime_seconds" in response.text
-    assert "didrepchecker_requests_total" in response.text
+    assert response.status_code == 404
 
 
 def test_scrape_empty_numbers():

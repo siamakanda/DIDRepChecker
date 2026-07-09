@@ -1,6 +1,5 @@
 """
 FastAPI server for DIDRepChecker
-Provides a /scrape endpoint that returns reputation data for a list of phone numbers.
 """
 
 from fastapi import FastAPI, HTTPException, Depends, Security, Request
@@ -15,7 +14,6 @@ import logging
 import time
 from did_intel.scraper import RoboKillerScraper
 from did_intel.config import get_config, reload_config
-from did_intel.metrics import metrics
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,50 +22,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger("did_intel.api")
 
-# ----------------------------------------------------------------------
-# Scraper instance (reused across requests)
-# ----------------------------------------------------------------------
 scraper = RoboKillerScraper()
-
-# ----------------------------------------------------------------------
-# API Key authentication
-# ----------------------------------------------------------------------
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 async def verify_api_key(api_key: str = Security(API_KEY_HEADER)):
-    """
-    FastAPI dependency: validate the X-API-Key header.
-    Skips check if api_key_required is False (backward compatible).
-    Config is cached — use POST /admin/reload-config to pick up runtime changes.
-    """
     cfg = get_config()
-
     if not cfg.get("api_key_required", False):
-        return True  # Auth disabled — allow all
-
+        return True
     if not api_key:
-        raise HTTPException(
-            status_code=401,
-            detail="Missing X-API-Key header. Get an API key from the server admin.",
-        )
-
-    allowed = cfg.get("allowed_api_keys", [])
-    if api_key not in allowed:
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid API key.",
-        )
-
+        raise HTTPException(status_code=401, detail="Missing X-API-Key header.")
+    if api_key not in cfg.get("allowed_api_keys", []):
+        raise HTTPException(status_code=403, detail="Invalid API key.")
     return True
 
 
-# ----------------------------------------------------------------------
-# FastAPI app setup
-# ----------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting up — initializing scraper session and cache")
+    logger.info("Starting DIDRepChecker API server")
     await scraper.start()
     await scraper.cache._init_db()
 
@@ -77,28 +49,24 @@ async def lifespan(app: FastAPI):
             await scraper.cache.cleanup_expired()
 
     cleanup_task = asyncio.create_task(periodic_cleanup())
-    logger.info("Startup complete — ready for requests")
-
     yield
-
-    logger.info("Shutting down — cancelling cleanup and closing scraper")
+    logger.info("Shutting down DIDRepChecker API server")
     cleanup_task.cancel()
     await scraper.close()
-    logger.info("Shutdown complete")
+
 
 app = FastAPI(
     title="DIDRepChecker API",
     description="Bulk phone number reputation lookup via RoboKiller.",
     version="2.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# Enable CORS — restricted to known clients
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "chrome-extension://*",           # Chrome extensions
-        "moz-extension://*",              # Firefox extensions
+        "chrome-extension://*",
+        "moz-extension://*",
         "http://localhost:*",
         "http://127.0.0.1:*",
     ],
@@ -107,18 +75,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ----------------------------------------------------------------------
-# In-memory rate limiter (per-IP token bucket)
-# ----------------------------------------------------------------------
-_rate_buckets: dict = {}  # ip -> (tokens, last_refill)
-
-RATE_LIMIT_RPS = 30       # requests per second per IP
-RATE_LIMIT_BURST = 60     # max burst
+_rate_buckets: dict = {}
+RATE_LIMIT_RPS = 30
+RATE_LIMIT_BURST = 60
 
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    if request.url.path in ("/health", "/metrics"):
+    if request.url.path == "/health":
         return await call_next(request)
     client = request.headers.get("X-Forwarded-For", request.client.host if request.client else "127.0.0.1")
     now = time.time()
@@ -136,6 +100,7 @@ async def rate_limit_middleware(request: Request, call_next):
     _rate_buckets[client] = (tokens - 1, now)
     return await call_next(request)
 
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.perf_counter()
@@ -143,8 +108,6 @@ async def log_requests(request: Request, call_next):
     elapsed_ms = (time.perf_counter() - start) * 1000
     client = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
     logger.info(f"{request.method} {request.url.path}  {response.status_code}  {elapsed_ms:.0f}ms  client={client}")
-    metrics.inc("requests_total")
-    metrics.add_duration("request_duration", (time.perf_counter() - start))
     return response
 
 
@@ -160,16 +123,12 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled error on {request.method} {request.url.path}: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"error": "Internal server error", "detail": str(exc)},
-    )
+    return JSONResponse(status_code=500, content={"error": "Internal server error", "detail": str(exc)})
 
-# ----------------------------------------------------------------------
-# Pydantic models
-# ----------------------------------------------------------------------
+
 class NumbersRequest(BaseModel):
-    numbers: List[str] = Field(..., min_length=1, description="List of phone numbers")
+    numbers: List[str] = Field(..., min_length=1)
+
 
 class NumberResult(BaseModel):
     phone_number: str
@@ -181,60 +140,32 @@ class NumberResult(BaseModel):
     scraped_at: str
 
 
-class ErrorResponse(BaseModel):
-    error: str
-    detail: str = ""
-
-
-# Maximum numbers allowed per scrape request (configurable)
 MAX_NUMBERS_PER_REQUEST = 500
 
-# ----------------------------------------------------------------------
-# Endpoints
-# ----------------------------------------------------------------------
-@app.post("/scrape", response_model=List[NumberResult])
-async def scrape_numbers(
-    request: NumbersRequest,
-    _auth: bool = Depends(verify_api_key),
-):
-    """
-    Accept a list of phone numbers and return reputation data.
 
-    Requires `X-API-Key` header when API key auth is enabled.
-    """
+@app.post("/scrape", response_model=List[NumberResult])
+async def scrape_numbers(request: NumbersRequest, _auth: bool = Depends(verify_api_key)):
     try:
         if len(request.numbers) > MAX_NUMBERS_PER_REQUEST:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Too many numbers. Maximum {MAX_NUMBERS_PER_REQUEST} per request, got {len(request.numbers)}.",
-            )
-        metrics.inc("scrape_requests")
-        results = await scraper.scrape_async(request.numbers)
-        metrics.inc("numbers_scraped", len(request.numbers))
-        return results
+            raise HTTPException(status_code=400, detail=f"Maximum {MAX_NUMBERS_PER_REQUEST} numbers per request.")
+        return await scraper.scrape_async(request.numbers)
     except HTTPException:
         raise
-    except Exception as e:
-        metrics.inc("scrape_errors")
-        logger.error(f"Scrape endpoint error: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Scrape endpoint error")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/health", response_model=Dict[str, str])
+
+@app.get("/health")
 async def health_check():
-    """
-    Simple health check endpoint.
-    """
     return {"status": "healthy"}
 
 
-@app.post("/admin/reload-config", response_model=Dict[str, str])
+@app.post("/admin/reload-config")
 async def admin_reload_config():
-    """
-    Hot-reload configuration from disk (e.g. after updating API keys).
-    """
     reload_config()
     cfg = get_config()
-    logger.info("Configuration reloaded via admin endpoint")
+    logger.info("Configuration reloaded")
     return {
         "status": "ok",
         "api_key_required": str(cfg.get("api_key_required", False)),
@@ -242,26 +173,12 @@ async def admin_reload_config():
     }
 
 
-@app.get("/metrics")
-async def prometheus_metrics():
-    """
-    Prometheus text-format metrics endpoint.
-    """
-    from fastapi.responses import PlainTextResponse
-    return PlainTextResponse(content=metrics.render(), media_type="text/plain")
-
-
 def main():
-    """Entry point for `didrepchecker-server` console script."""
     import uvicorn
     from did_intel.config import get_config
     cfg = get_config()
-    uvicorn.run(
-        "did_intel.api:app",
-        host=cfg.get("api_host", "0.0.0.0"),
-        port=cfg.get("api_port", 8000),
-        reload=cfg.get("api_reload", False),
-    )
+    logger.info("DIDRepChecker API starting on %s:%s", cfg.get("api_host", "0.0.0.0"), cfg.get("api_port", 8000))
+    uvicorn.run("did_intel.api:app", host=cfg.get("api_host", "0.0.0.0"), port=cfg.get("api_port", 8000), log_level="info", access_log=False)
 
 
 if __name__ == "__main__":
