@@ -134,8 +134,17 @@
     <button id="addApiUrlBtn">Add</button>
   </div>
   <div class="url-validation" id="urlValidation"></div>
-  <button id="testConnectionBtn" class="secondary" style="margin-top:8px">Test Connection</button>
+  <div class="settings-row-inline" style="gap:6px">
+    <button id="testConnectionBtn" class="secondary tiny">Test Connection</button>
+    <button id="resetApiUrlBtn" class="secondary tiny">Reset to Default</button>
+  </div>
   <div id="apiStatus" class="status"></div>
+  <hr>
+  <div class="section-title">Server</div>
+  <div id="serverInfo" class="server-info">Not connected</div>
+  <hr>
+  <div class="section-title">Cache</div>
+  <div id="cacheInfo" class="cache-info">Unknown</div>
   <hr>
   <div class="section-title">API Key</div>
   <div class="add-endpoint">
@@ -145,7 +154,6 @@
   <div id="apiKeyStatus" class="status"></div>
   <hr>
   <div class="settings-row">
-    <button id="clearStorageBtn" class="secondary">Clear Stored Results</button>
     <div class="toggle-container">
       <span>Dark Mode</span>
       <label class="switch">
@@ -153,6 +161,7 @@
         <span class="slider"></span>
       </label>
     </div>
+    <button id="clearStorageBtn" class="secondary tiny">Clear Results</button>
   </div>
   <div class="footer-version">DIDRepChecker v2.0</div>
   <div class="shortcuts-hint">

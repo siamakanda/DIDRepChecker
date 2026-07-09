@@ -442,6 +442,63 @@ async function loadApiUrls() {
     renderApiUrls(response.urls);
 }
 
+// ─── Delete confirmation ───────────────────────────────────────
+document.addEventListener('click', async (e) => {
+    if (!e.target.classList.contains('remove-url')) return;
+    if (!confirm('Remove this API endpoint?')) return;
+    const btn = e.target;
+    const idx = parseInt(btn.dataset.idx);
+    const resp = await chrome.runtime.sendMessage({ action: "getApiUrls" });
+    const newUrls = [...resp.urls];
+    newUrls.splice(idx, 1);
+    await chrome.runtime.sendMessage({ action: "saveApiUrls", urls: newUrls });
+    renderApiUrls(newUrls);
+    apiStatus.innerText = "Endpoint removed.";
+});
+
+// ─── Reset API URL to default ───────────────────────────────────
+const resetApiUrlBtn = document.getElementById("resetApiUrlBtn");
+if (resetApiUrlBtn) {
+    resetApiUrlBtn.addEventListener("click", async () => {
+        const defaultUrl = "http://localhost:8000/scrape";
+        await chrome.runtime.sendMessage({ action: "saveApiUrls", urls: [defaultUrl] });
+        renderApiUrls([defaultUrl]);
+        apiStatus.innerText = "Reset to default endpoint.";
+    });
+}
+
+// ─── Server info on Settings tab open ───────────────────────────
+async function refreshServerInfo() {
+    const el = document.getElementById("serverInfo");
+    if (!el) return;
+    el.innerText = "Checking...";
+    try {
+        const resp = await chrome.runtime.sendMessage({ action: "getApiUrls" });
+        const baseUrl = (resp.urls[0] || "http://localhost:8000/scrape").replace(/\/scrape$/, "");
+        const res = await fetch(baseUrl + "/health", { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+            el.innerHTML = '<span class="url-valid">Running on ' + baseUrl + '</span>';
+        } else {
+            el.innerHTML = '<span class="url-invalid">Not responding (' + res.status + ')</span>';
+        }
+    } catch (e) {
+        el.innerHTML = '<span class="url-invalid">Offline</span>';
+    }
+}
+
+// ─── Cache info ────────────────────────────────────────────────
+function refreshCacheInfo() {
+    const el = document.getElementById("cacheInfo");
+    if (!el) return;
+    if (!apiResults.length) {
+        el.innerText = "No results loaded";
+        return;
+    }
+    const cached = apiResults.filter(r => !['Error','Blocked','Timeout','ConnectionError','HTTP'].some(e => r.reputation && r.reputation.includes(e)));
+    el.innerText = cached.length + " cached results loaded";
+}
+
+// ─── Render API URLs (with delete handler removed — handled globally above) ──
 function renderApiUrls(urls) {
     apiUrlsListDiv.innerHTML = "";
     if (!urls.length) {
@@ -453,28 +510,24 @@ function renderApiUrls(urls) {
         div.className = "api-url-item";
         div.innerHTML = `
             <input type="text" value="${url}" data-idx="${idx}" class="api-url-input">
-            <button class="remove-url" data-idx="${idx}" style="background:#dc3545; color:white; border:none; border-radius:4px; cursor:pointer;">❌</button>
+            <button class="remove-url" data-idx="${idx}" style="background:#dc3545; color:white; border:none; border-radius:4px; cursor:pointer;">&#10005;</button>
         `;
         apiUrlsListDiv.appendChild(div);
-    });
-    document.querySelectorAll('.remove-url').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const idx = parseInt(btn.dataset.idx);
-            const newUrls = [...urls];
-            newUrls.splice(idx, 1);
-            await chrome.runtime.sendMessage({ action: "saveApiUrls", urls: newUrls });
-            renderApiUrls(newUrls);
-        });
     });
     document.querySelectorAll('.api-url-input').forEach(input => {
         input.addEventListener('change', async (e) => {
             const idx = parseInt(input.dataset.idx);
-            const newUrls = [...urls];
+            const resp = await chrome.runtime.sendMessage({ action: "getApiUrls" });
+            const newUrls = [...resp.urls];
             newUrls[idx] = input.value;
             await chrome.runtime.sendMessage({ action: "saveApiUrls", urls: newUrls });
         });
     });
+    refreshServerInfo();
 }
+
+// ─── Test Connection ─────────────────────────────────────────────
+const testConnectionBtn = document.getElementById("testConnectionBtn");
 
 function exportResultsCSV() {
     if (!apiResults.length) {
@@ -894,27 +947,8 @@ if (cancelScrapeBtn) {
 const testConnectionBtn = document.getElementById("testConnectionBtn");
 if (testConnectionBtn) {
     testConnectionBtn.addEventListener("click", async () => {
-        const resp = await chrome.runtime.sendMessage({ action: "getApiUrls" });
-        const urls = resp.urls;
-        if (!urls.length) {
-            apiStatus.innerText = "No endpoints configured.";
-            return;
-        }
-        apiStatus.innerText = "Testing connection...";
-        try {
-            const baseUrl = urls[0].replace(/\/scrape$/, "");
-            const res = await fetch(baseUrl + "/health", { method: "GET", signal: AbortSignal.timeout(5000) });
-            if (res.ok) {
-                apiStatus.innerText = "Connected (health check OK)";
-                apiStatus.style.color = "var(--success)";
-            } else {
-                apiStatus.innerText = "Server returned " + res.status;
-                apiStatus.style.color = "var(--danger)";
-            }
-        } catch (e) {
-            apiStatus.innerText = "Connection failed: " + e.message;
-            apiStatus.style.color = "var(--danger)";
-        }
+        await refreshServerInfo();
+        refreshCacheInfo();
     });
 }
 
